@@ -1,0 +1,37 @@
+---
+title: "Report on analyzing the current state of the legal cartography of watercourses in France"
+format: docx
+editor: visual
+execute-dir: project
+---
+
+```{r load-data}
+library(targets)
+library(data.table)
+tar_load(metadata_nets_formatted)
+tar_load(ddtnets_bvinters)
+
+knit_print.integer = function(x, ...) {
+  prettyNum(x, big.mark=",")
+}
+
+ddtnets_n_reported <- as.integer(sum(metadata_nets_formatted$nlines_reported))
+ddtnets_n <- ddtnets_bvinters[!duplicated(UID_CE), .N]
+ddtorig_n_online <- metadata_nets_formatted[
+  !duplicated(local_url) &
+    (data_orig %in% c('GEOIDE', 'Autre site')), 
+  .N]
+ddtorig_n_ddt <- metadata_nets_formatted[
+  !duplicated(local_url) & 
+    (data_orig %in% c('DDT', 'Données procurées à Hervé Pella par DDT')), 
+  .N]
+
+```
+
+## Metadata
+
+There are `r length(unique(metadata_nets_formatted$local_url))` unique networks for mainland France, for a total of `r ddtnets_n_reported` individual watercourse segments. After removing invalid and duplicate geometries, there remain `r ddtnets_n` individual segments in the compiled dataset.
+
+We obtained `r ddtorig_n_online` datasets directly online and `r ddtorig_n_ddt` from requests to the DDTs. 
+
+
