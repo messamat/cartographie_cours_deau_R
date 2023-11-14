@@ -20,6 +20,12 @@ list(
                        'metadonnes_cartographie_cours_deau_20231106.xlsx')
              ) #format='file'
     ,
+  tar_target(ddt_nets_colnas_path,
+             file.path(resdir, 
+                       'cartos_loi_eau_colNAs.csv'),
+             format='file'
+  ) 
+  ,
   
   #Establish csv file paths (to be reactive to file updates)
   # tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
@@ -47,6 +53,7 @@ list(
                           'text', 'text'
                        ))),
   tar_target(metadata_websites, read_xlsx(path = ddt_metadata_path, sheet="Données_sites_DDT")),
+  tar_target(ddt_nets_colnas, fread(ddt_nets_colnas_path)),
   
   #"skip", "guess", "logical", "numeric", "date", "text" or "list"
   
@@ -70,7 +77,7 @@ list(
   #Read and merge gdb tables
   tar_target(
     env_gdbtabs,
-    lapply(c('ari_ix_ssu','ari_ix_syr'
+    lapply(c('ari_ix_ssu','ari_ix_syr', 'ppc_in_sav'
              ,'awc_mm_sav0_5' ,'awc_mm_sav5_15' ,'awc_mm_sav15_30'
              ,'awc_mm_sav30_60','awc_mm_sav60_100','awc_mm_sav100_200'
              ,'cly_pc_sav0_5','cly_pc_sav5_15','cly_pc_sav15_30'

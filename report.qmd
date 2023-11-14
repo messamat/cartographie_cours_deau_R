@@ -3,6 +3,9 @@ title: "Report on analyzing the current state of the legal cartography of waterc
 format: docx
 editor: visual
 execute-dir: project
+execute:
+  echo: false
+  warning: false
 ---
 
 ```{r load-data}
@@ -13,13 +16,15 @@ library(targets)
 
 tar_load(metadata_nets_formatted)
 tar_load(ddtnets_bvinters)
+tar_load(ddt_nets_colnas)
 
 knit_print.integer = function(x, ...) {
   prettyNum(x, big.mark=",")
 }
 ```
 
-## Metadata
+# Metadata
+
 ```{r summarize metadata}
 ddtnets_n_reported <- as.integer(sum(metadata_nets_formatted$nlines_reported))
 ddtnets_n <- ddtnets_bvinters[!duplicated(UID_CE), .N]
@@ -35,13 +40,16 @@ ddtorig_n_ddt <- metadata_nets_formatted[
 
 ddtnets_attris <- metadata_nets_formatted[!duplicated(local_url),
                                             str_split_1(attri_names, ';'),
-                                            by='dep_code']
+                                            by='dep_code'] %>%
+  .[V1 != '',]
 ddtnets_attris_n <- ddtnets_attris[, .N, by='dep_code']
 
 #Check matching in attribute names among departments (removing spaces and caps)
 attrimatches_pairwise_avg  <- as.data.table(
   t(combn(ddtnets_attris[, paste(dep_code, 
-                                 str_to_lower(gsub('\\s', '', V1, perl=TRUE)), 
+                                 str_to_lower(
+                                   gsub('(^\\s)|(\\s$)', '', V1, perl=TRUE)
+                                 ), 
                                  sep=";")],
           2))) %>%
   .[, c('dep_code_1' , 'attri_name_1') := tstrsplit(V1, ';')] %>%
@@ -55,7 +63,7 @@ attrimatches_pairwise_avg  <- as.data.table(
 
 There are `r length(unique(metadata_nets_formatted$local_url))` unique networks for mainland France, for a total of `r ddtnets_n_reported` individual watercourse segments. After removing invalid and duplicate geometries, there remain `r ddtnets_n` individual segments in the compiled dataset.
 
-We obtained `r ddtorig_n_online` datasets directly online and `r ddtorig_n_ddt` from requests to the DDTs. 
+We obtained `r ddtorig_n_online` datasets directly online and `r ddtorig_n_ddt` from requests to the DDTs.
 
 Most layers that are available online are regularly updated following yearly, or semestral meetings to integrate re-classification requests, as shown by the distribution of "revision date" provided in the online metadata associated with the layers (n=`r metadata_nets_formatted[!is.na(date_rev), .N]`/`r metadata_nets_formatted[, .N]` departments):
 
@@ -73,7 +81,7 @@ ggplot(metadata_nets_formatted, aes(x=as.Date(date_rev))) +
   theme(axis.text.x = element_text(angle=45, hjust=1))
 ```
 
-The attributes associated with the data were varied. On average, the networks included `r mean(ddtnets_attris_n)` attributes (min-max:`r min(ddtnets_attris_n`-`rmax(ddtnets_attris_n`). These attributes were more or less common to the various networks. After removing formatting differences (different uses of caps and spaces), any two pair of network had `r `round(attrimatches_pairwise_avg, 2)` attributes in common, on average.
+The attributes associated with the data were varied, with `r`length(unique(ddtnets_attris\$V1))`unique attribute names across all networks. On average, the networks included`r mean(ddtnets_attris_n)`attributes (min-max:`r min(ddtnets_attris_n)`-`rmax(ddtnets_attris_n`). These attributes were more or less common to the various networks. After removing formatting differences (different uses of caps and spaces), any two pair of network had`r `round(attrimatches_pairwise_avg, 2)` attributes in common, on average.
 
 In its guidelines to DDT in 2015, the ONEMA proposed that a minimum set of standardized fields be used by DDTs:
 
@@ -90,33 +98,106 @@ In its guidelines to DDT in 2015, the ONEMA proposed that a minimum set of stand
 -   AUTEUR - Service qui a effectué la modification (ex : SPE55)
 
 The following attributes are the most common in the networks:
+
 ```{r attri_names plot}
-onema_attris <- data.table(
-  attri_name = c('type_ecoul', 'nat_ident', 'date_ident', 'orig_modif',
-    'code_hydro', 'auteur'),
-  attri_orig = 'onema'
-)
-bdtopo_attris <- data.table(
-  attri_name = c('id_loc', 'id', 'prec_plani', 'prec_alti', 'artif', 'fictif', 'franchisst', 'nom', 'pos_sol', 'regime', 'z_ini', 'prec_p_m', 'prec_a_m', 'artif_m', 'fictif_m', 'franchis_m', 'nom_m', 'pos_sol_m', 'regime_m', 'z_ini_m', 'z_fin_m'),
-  attri_orig = 'bdtopo'
-)
+#Check which departments have an attribute that fits with the ONEMA recommendations
+#Counting both without and with manual name standardization
+ddtnets_standardized_attris <- metadata_nets_formatted[
+  , c("dep_code", "type_stand_name","regime_name",
+      "nat_id_name", "orig_mo_name", "date_id_name"),
+  with=F] %>%
+  setnames(
+    c("type_stand_name", "regime_name", "nat_id_name","orig_mo_name", "date_id_name"),
+    c("type_ecoul", "regime", "nat_ident", "orig_modif", "date_ident")) %>%
+  melt(id.vars='dep_code') %>%
+  .[, list(
+    attri_name= str_split_1(
+      str_to_lower(gsub('(^\\s)|(\\s$)', '', value, perl=TRUE)),
+      ';')
+  ),
+  by=c('dep_code','variable')]
+
+
+onema_attris <- c('type_ecoul', 'nat_ident', 'date_ident', 'orig_modif',
+                  'code_hydro', 'auteur', 'comm')
+bdtopo_attris <- c('id_loc', 'id', 'prec_plani', 'prec_alti', 'artif', 'fictif', 
+                   'franchisst', 'nom', 'pos_sol', 'regime', 'z_ini', 'z_fin', 
+                   'prec_p_m', 'prec_a_m', 'artif_m', 'fictif_m', 'franchis_m', 
+                   'nom_m', 'pos_sol_m', 'regime_m', 'z_ini_m', 'z_fin_m')
 
 attris_all <- ddtnets_attris[, list(
-  attri_name= str_to_lower(gsub('\\s', '', V1, perl=TRUE)))] %>%
-  .[attri_name %in% onema_attris$attri_name, attri_orig := 'onema'] %>%
-  .[attri_name %in% bdtopo_attris$attri_name, attri_orig := 'bdtopo'] %>%
-  .[is.na(attri_orig), attri_orig:='other'] %>%
-  .[, n := .N, by=attri_name]
+  attri_name= str_to_lower(gsub('(^\\s)|(\\s$)', '', V1, perl=TRUE))), 
+  by='dep_code'] %>%
+  merge(ddtnets_standardized_attris, 
+        by=c('attri_name', 'dep_code'), all.x=T) %>%
+  .[, is_standardized := fifelse((variable == attri_name) | is.na(variable), 
+                              'no', 'yes')] %>%
+  .[, standardized_name := variable] %>%
+  .[is.na(variable), standardized_name := attri_name] %>%
+  .[standardized_name %in% onema_attris, attri_orig := 'ONEMA'] %>%
+  .[standardized_name %in% bdtopo_attris, attri_orig := 'BDTOPO'] %>%
+  .[is.na(attri_orig), attri_orig:='Other'] %>%
+  .[, n := .N, by=c('standardized_name', 'is_standardized')] %>%
+  .[, n_total := .N, by=standardized_name]
 
-ggplot(attris_all[n>20,], aes(x=reorder(attri_name,-n), fill=attri_orig)) +
-  geom_histogram(stat='count') +
+
+ggplot(attris_all[n_total>20,], aes(x=reorder(standardized_name,-n_total), 
+                              fill=attri_orig, 
+                              alpha=is_standardized)
+       ) +
+  geom_histogram(stat='count', 
+                 position = position_stack(reverse = TRUE)) +
   scale_x_discrete(name='Attribute name') +
   scale_y_continuous(
     name='Number of departments',
+    limits=c(0, length(unique(ddtnets_attris$dep_code))),
     expand=c(0,0)) +
+  scale_fill_discrete(name='Origin of the attribute') +
+  scale_alpha_discrete(name= str_wrap('After manual name standardization', 20),
+                       range = c(1, 0.6)) +
   theme_bw() + 
   theme(axis.text.x = element_text(angle=45, hjust=1))
 ```
 
+DDTs were supposed to use the BD TOPO (TRONCON_COURS_EAU), v 15.1 (2015) as the hydrographic foundation to build their cartography (to be completed -- look for individual departments for which this information is still not available). Double check website and only cartography + search the internet?
 
-DDTs were supposed to use the BD TOPO (TRONCON_COURS_EAU), v 15.1 (2015) as the hydrographic foundation to build their cartography.
+```{r attri_nas plot}
+#Compute percentage of NAs in cols of all DDTs
+ddt_nets_colnas[, perc_null := 100*(n_null/nrows)]
+attris_all_colnas <- merge(ddt_nets_colnas, 
+                           attris_all[n_total>20, -c('attri_name')], 
+                           by.x=c('attri_name', 'dep_code'),
+                           by.y=c('standardized_name', 'dep_code'))
+
+ggplot(attris_all_colnas, 
+       aes(x=reorder(attri_name, -n_total), y=perc_null, fill=attri_orig)) +
+  geom_boxplot(alpha=0.75) +
+  scale_x_discrete(name='Attribute name') +
+  scale_y_continuous(
+    name='Percentage of records without a value',
+    #limits=c(0, length(unique(ddtnets_attris$dep_code))),
+    expand=c(0,0)) +
+  scale_fill_discrete(name='Origin of the attribute') +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+
+
+```
+
+Even for a given attribute, there was substantial variability. For the attribute describing the status of the hydrographic segments under water law, there are 5 possible categories: watercourse, not watercourse, undetermined, inexistant and outside of the department.
+
+```{r type_stand_cats}
+
+type_ecoul_cats <- metadata_nets_formatted[
+  , str_to_lower(gsub('(^\\s)|(\\s$)', '', 
+                      str_split_1(type_stand_cats, ';'), 
+                      perl=TRUE)
+  ),
+  by='dep_code']
+type_ecoul_cats_N <- type_ecoul_cats[, .N, by=dep_code]
+```
+
+Nonetheless, there were a total of `r length(unique(type_ecoul_cats$V1))` unique categories for this attribute across the networks (including typos), for an average of `r round(mean(type_ecoul_cats_N$N), 1)` per network. The hydrographic segments that were considered not to qualify as a watercourse were provided for `r round(metadata_nets_formatted[, nrow(.SD[nce_recat!="Pas de catégorie correspondante",])/.N])` of departments.
+
+# Drainage density
+
