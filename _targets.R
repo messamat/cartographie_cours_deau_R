@@ -22,31 +22,39 @@ list(
     ,
   
   #Establish csv file paths (to be reactive to file updates)
-  tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
-  tar_target(bdtopo_bvinters_path, file.path(resdir, "bdtopo2015_fr_bvinters.csv"),format = 'file'), #BDTOPO
-  tar_target(rht_bvinters_path, file.path(resdir, "rht_lbt93_bvinters.csv"),format = 'file'), #RHT
-  tar_target(carthage_bvinters_path, file.path(resdir, "TRONCON_HYDROGRAPHIQUE_bvinters.csv"  ),format = 'file'), #Carthage
+  # tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
+  # tar_target(bdtopo_bvinters_path, file.path(resdir, "bdtopo2015_fr_bvinters.csv"),format = 'file'), #BDTOPO
+  # tar_target(rht_bvinters_path, file.path(resdir, "rht_lbt93_bvinters.csv"),format = 'file'), #RHT
+  # tar_target(carthage_bvinters_path, file.path(resdir, "TRONCON_HYDROGRAPHIQUE_bvinters.csv"  ),format = 'file'), #Carthage
   tar_target(ddtnets_bvinters_path, file.path(resdir, "carto_loi_eau_fr_bvinters.csv"),format = 'file'), #DDT harmonized networks
   
-  tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
-  tar_target(bdforest_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
-  tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
-  tar_target(comirrig_bvinters_path, file.path(resdir, "communes_irrig_bvinters.csv"),format = 'file'), #commune-based irrigation
-  tar_target(bdcharm_bvinters_path, file.path(resdir, "lithology_bdcharm_fr_bvinters.csv"),format = 'file'), #lithology
-  tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
-  tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
-  tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
-  
+  # tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
+  # tar_target(bdforest_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
+  # tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
+  # tar_target(comirrig_bvinters_path, file.path(resdir, "communes_irrig_bvinters.csv"),format = 'file'), #commune-based irrigation
+  # tar_target(bdcharm_bvinters_path, file.path(resdir, "lithology_bdcharm_fr_bvinters.csv"),format = 'file'), #lithology
+  # tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
+  # tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
+  # tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
+
   #Read in DDT metadata
   tar_target(metadata_sources, read_xlsx(path = ddt_metadata_path, sheet="Sources")),
-  tar_target(metadata_nets, read_xlsx(path = ddt_metadata_path, sheet="Métadonnées_réseau_SIG")),
+  tar_target(
+    metadata_nets, 
+    read_xlsx(path = ddt_metadata_path, sheet="Métadonnées_réseau_SIG",
+              col_types=c('numeric', rep('text', 4), 'numeric', rep('text', 21),
+                          'numeric', 'text', 'date', 'date', 'text', 'date',
+                          'text', 'text'
+                       ))),
   tar_target(metadata_websites, read_xlsx(path = ddt_metadata_path, sheet="Données_sites_DDT")),
   
+  #"skip", "guess", "logical", "numeric", "date", "text" or "list"
+  
   #Read in csvs of networks
-  tar_target(bcae_bvinters, fread(bcae_bvinters_path)), #BCAE
-  tar_target(bdtopo_bvinters, fread(bdtopo_bvinters_path)), #BDTOPO
-  tar_target(rht_bvinters, fread(rht_bvinters_path)), #RHT
-  tar_target(carthage_bvinters, fread(carthage_bvinters_path)), #Carthage
+  # tar_target(bcae_bvinters, fread(bcae_bvinters_path)), #BCAE
+  # tar_target(bdtopo_bvinters, fread(bdtopo_bvinters_path)), #BDTOPO
+  # tar_target(rht_bvinters, fread(rht_bvinters_path)), #RHT
+  # tar_target(carthage_bvinters, fread(carthage_bvinters_path)), #Carthage
   tar_target(ddtnets_bvinters, fread(ddtnets_bvinters_path)), #DDT harmonized networks
   
   #Read in csvs of environmental files

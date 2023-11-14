@@ -54,9 +54,9 @@ format_metadata_nets <- function(in_metadata_nets) {
   
   collapse_cols <- c("attri_names", "type_stand_name", "type_stand_cats",
                      "ce_recat","nce_recat", "ind_recat", "inx_recat", 
-                     "hd_recat", "nce_included", "type_aux_name", "regime_name",
-                     "nat_id_name", "orig_mo_name", "date_id_name", "date_rev",
-                     "date_pub", "data_orig", "date_get", "local_url", "com")
+                     "hd_recat", "type_aux_name", "regime_name",
+                     "nat_id_name", "orig_mo_name", "date_id_name","data_orig", 
+                     "local_url", "com")
   
   mdat_dt_comb <- 
     lapply(collapse_cols, function(col_name) {
@@ -82,7 +82,6 @@ format_metadata_nets <- function(in_metadata_nets) {
   
   return( mdat_dt_uform)
 }
-
 # tar_load(bcae_bvinters)
 # tar_load(bdtopo_bvinters)
 # tar_load(rht_bvinters)

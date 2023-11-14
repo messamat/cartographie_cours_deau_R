@@ -6,15 +6,21 @@ execute-dir: project
 ---
 
 ```{r load-data}
-library(targets)
 library(data.table)
+library(ggplot2)
+library(stringr)
+library(targets)
+
 tar_load(metadata_nets_formatted)
 tar_load(ddtnets_bvinters)
 
 knit_print.integer = function(x, ...) {
   prettyNum(x, big.mark=",")
 }
+```
 
+## Metadata
+```{r summarize metadata}
 ddtnets_n_reported <- as.integer(sum(metadata_nets_formatted$nlines_reported))
 ddtnets_n <- ddtnets_bvinters[!duplicated(UID_CE), .N]
 ddtorig_n_online <- metadata_nets_formatted[
@@ -26,12 +32,91 @@ ddtorig_n_ddt <- metadata_nets_formatted[
     (data_orig %in% c('DDT', 'Données procurées à Hervé Pella par DDT')), 
   .N]
 
-```
 
-## Metadata
+ddtnets_attris <- metadata_nets_formatted[!duplicated(local_url),
+                                            str_split_1(attri_names, ';'),
+                                            by='dep_code']
+ddtnets_attris_n <- ddtnets_attris[, .N, by='dep_code']
+
+#Check matching in attribute names among departments (removing spaces and caps)
+attrimatches_pairwise_avg  <- as.data.table(
+  t(combn(ddtnets_attris[, paste(dep_code, 
+                                 str_to_lower(gsub('\\s', '', V1, perl=TRUE)), 
+                                 sep=";")],
+          2))) %>%
+  .[, c('dep_code_1' , 'attri_name_1') := tstrsplit(V1, ';')] %>%
+  .[, c('dep_code_2' , 'attri_name_2') := tstrsplit(V2, ';')] %>%
+  .[dep_code_1 != dep_code_2] %>%
+  .[, -c('V1', 'V2')] %>%
+  .[, sum(attri_name_1==attri_name_2, na.rm=T), 
+    by=c('dep_code_1', 'dep_code_2')] %>%
+  .[, mean(V1)]
+```
 
 There are `r length(unique(metadata_nets_formatted$local_url))` unique networks for mainland France, for a total of `r ddtnets_n_reported` individual watercourse segments. After removing invalid and duplicate geometries, there remain `r ddtnets_n` individual segments in the compiled dataset.
 
 We obtained `r ddtorig_n_online` datasets directly online and `r ddtorig_n_ddt` from requests to the DDTs. 
 
+Most layers that are available online are regularly updated following yearly, or semestral meetings to integrate re-classification requests, as shown by the distribution of "revision date" provided in the online metadata associated with the layers (n=`r metadata_nets_formatted[!is.na(date_rev), .N]`/`r metadata_nets_formatted[, .N]` departments):
 
+```{r date_rev plot}
+ggplot(metadata_nets_formatted, aes(x=as.Date(date_rev))) +
+  geom_histogram() +
+  scale_x_date(
+    name='Reported revision date',
+    date_labels=str_wrap("%m-%Y", 5), date_breaks  ="6 month",
+    expand=c(0,0)) + 
+  scale_y_continuous(
+    name='Number of departments',
+    expand=c(0,0)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+```
+
+The attributes associated with the data were varied. On average, the networks included `r mean(ddtnets_attris_n)` attributes (min-max:`r min(ddtnets_attris_n`-`rmax(ddtnets_attris_n`). These attributes were more or less common to the various networks. After removing formatting differences (different uses of caps and spaces), any two pair of network had `r `round(attrimatches_pairwise_avg, 2)` attributes in common, on average.
+
+In its guidelines to DDT in 2015, the ONEMA proposed that a minimum set of standardized fields be used by DDTs:
+
+-   TYPE_ECOUL - Type d'écoulement: Cours d'eau, Indéterminé, Non cours d'eau, Inexistant
+
+-   NAT_IDENT - Méthode d'identification de l'écoulement: Analyse cartographique, Terrain, Décision de justice
+
+-   DATE_IDENT - Date de l'identification du type d'écoulement par les experts concernés
+
+-   ORIG_MODIF - Source de la modification, de la suppression du tronçon BD TOPO®, ou de l'ajout d'un nouveau tronçon: e.g., Levé GPS BDCarthage SCAN25 BDORTHO BDPARCELLAIRE CARTE d'étatmajor Cadastre napoléonien Atlas ancien Autre
+
+-   CODE_HYDRO - Code générique du cours d'eau (identifiant pour la codification hydrographique) A reporter depuis la BD CARTHAGE® si le tronçon correspond à un cours d'eau codifié
+
+-   AUTEUR - Service qui a effectué la modification (ex : SPE55)
+
+The following attributes are the most common in the networks:
+```{r attri_names plot}
+onema_attris <- data.table(
+  attri_name = c('type_ecoul', 'nat_ident', 'date_ident', 'orig_modif',
+    'code_hydro', 'auteur'),
+  attri_orig = 'onema'
+)
+bdtopo_attris <- data.table(
+  attri_name = c('id_loc', 'id', 'prec_plani', 'prec_alti', 'artif', 'fictif', 'franchisst', 'nom', 'pos_sol', 'regime', 'z_ini', 'prec_p_m', 'prec_a_m', 'artif_m', 'fictif_m', 'franchis_m', 'nom_m', 'pos_sol_m', 'regime_m', 'z_ini_m', 'z_fin_m'),
+  attri_orig = 'bdtopo'
+)
+
+attris_all <- ddtnets_attris[, list(
+  attri_name= str_to_lower(gsub('\\s', '', V1, perl=TRUE)))] %>%
+  .[attri_name %in% onema_attris$attri_name, attri_orig := 'onema'] %>%
+  .[attri_name %in% bdtopo_attris$attri_name, attri_orig := 'bdtopo'] %>%
+  .[is.na(attri_orig), attri_orig:='other'] %>%
+  .[, n := .N, by=attri_name]
+
+ggplot(attris_all[n>20,], aes(x=reorder(attri_name,-n), fill=attri_orig)) +
+  geom_histogram(stat='count') +
+  scale_x_discrete(name='Attribute name') +
+  scale_y_continuous(
+    name='Number of departments',
+    expand=c(0,0)) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+```
+
+
+DDTs were supposed to use the BD TOPO (TRONCON_COURS_EAU), v 15.1 (2015) as the hydrographic foundation to build their cartography.
