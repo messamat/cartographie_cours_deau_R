@@ -197,7 +197,11 @@ type_ecoul_cats <- metadata_nets_formatted[
 type_ecoul_cats_N <- type_ecoul_cats[, .N, by=dep_code]
 ```
 
-Nonetheless, there were a total of `r length(unique(type_ecoul_cats$V1))` unique categories for this attribute across the networks (including typos), for an average of `r round(mean(type_ecoul_cats_N$N), 1)` per network. The hydrographic segments that were considered not to qualify as a watercourse were provided for `r round(metadata_nets_formatted[, nrow(.SD[nce_recat!="Pas de catégorie correspondante",])/.N])` of departments.
+Nonetheless, there were a total of `r length(unique(type_ecoul_cats$V1))` unique categories for this attribute across the networks (including typos), for an average of `r round(mean(type_ecoul_cats_N$N), 1)` per network. The hydrographic segments that were considered not to qualify as a watercourse were provided for `r round(100*metadata_nets_formatted[, nrow(.SD[nce_recat!="Pas de catégorie correspondante",])/.N])`% of departments.
 
 # Drainage density
+## Comparison dataset characteristics
+  in_bcae_bvinters[,
+                  .N, by=ORIGINE1]
+
 

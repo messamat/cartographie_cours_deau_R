@@ -28,10 +28,10 @@ list(
   ,
   
   #Establish csv file paths (to be reactive to file updates)
-  # tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
-  # tar_target(bdtopo_bvinters_path, file.path(resdir, "bdtopo2015_fr_bvinters.csv"),format = 'file'), #BDTOPO
-  # tar_target(rht_bvinters_path, file.path(resdir, "rht_lbt93_bvinters.csv"),format = 'file'), #RHT
-  # tar_target(carthage_bvinters_path, file.path(resdir, "TRONCON_HYDROGRAPHIQUE_bvinters.csv"  ),format = 'file'), #Carthage
+  tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
+  tar_target(bdtopo_bvinters_path, file.path(resdir, "bdtopo2015_fr_bvinters.csv"),format = 'file'), #BDTOPO
+  tar_target(rht_bvinters_path, file.path(resdir, "rht_lbt93_bvinters.csv"),format = 'file'), #RHT
+  tar_target(carthage_bvinters_path, file.path(resdir, "TRONCON_HYDROGRAPHIQUE_bvinters.csv"  ),format = 'file'), #Carthage
   tar_target(ddtnets_bvinters_path, file.path(resdir, "carto_loi_eau_fr_bvinters.csv"),format = 'file'), #DDT harmonized networks
   
   # tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
@@ -58,10 +58,10 @@ list(
   #"skip", "guess", "logical", "numeric", "date", "text" or "list"
   
   #Read in csvs of networks
-  # tar_target(bcae_bvinters, fread(bcae_bvinters_path)), #BCAE
-  # tar_target(bdtopo_bvinters, fread(bdtopo_bvinters_path)), #BDTOPO
-  # tar_target(rht_bvinters, fread(rht_bvinters_path)), #RHT
-  # tar_target(carthage_bvinters, fread(carthage_bvinters_path)), #Carthage
+  tar_target(bcae_bvinters, fread(bcae_bvinters_path)), #BCAE
+  tar_target(bdtopo_bvinters, fread(bdtopo_bvinters_path)), #BDTOPO
+  tar_target(rht_bvinters, fread(rht_bvinters_path)), #RHT
+  tar_target(carthage_bvinters, fread(carthage_bvinters_path)), #Carthage
   tar_target(ddtnets_bvinters, fread(ddtnets_bvinters_path)), #DDT harmonized networks
   
   #Read in csvs of environmental files
@@ -100,8 +100,19 @@ list(
   tar_target(
     metadata_nets_formatted,
     format_metadata_nets(metadata_nets)
-  )
+  ),
   
+  tar_target(
+    ddtnets_bvinters_formatted,
+    format_ddtnets_bvinters(in_ddtnets_bvinters = ddtnets_bvinters)
+  ),
+  
+  tar_target(
+    ddtnet_dep_plots,
+    plot_ddtnet_dep(ddtnets_bvinters_formatted)
+  )
+    
+
   #------------------------------- Format statistics ---------------------------
   #amber_bvinters[, .N, by=c('LabelAtlas', 'UID_BV')]
 
