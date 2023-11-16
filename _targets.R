@@ -18,8 +18,8 @@ list(
   tar_target(ddt_metadata_path,
              file.path(datdir, 
                        'metadonnes_cartographie_cours_deau_20231106.xlsx')
-             ) #format='file'
-    ,
+  ) #format='file'
+  ,
   tar_target(ddt_nets_colnas_path,
              file.path(resdir, 
                        'cartos_loi_eau_colNAs.csv'),
@@ -42,7 +42,7 @@ list(
   # tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
   # tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
   # tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
-
+  
   #Read in DDT metadata
   tar_target(metadata_sources, read_xlsx(path = ddt_metadata_path, sheet="Sources")),
   tar_target(
@@ -51,7 +51,7 @@ list(
               col_types=c('numeric', rep('text', 4), 'numeric', rep('text', 21),
                           'numeric', 'text', 'date', 'date', 'text', 'date',
                           'text', 'text'
-                       ))),
+              ))),
   tar_target(metadata_websites, read_xlsx(path = ddt_metadata_path, sheet="Données_sites_DDT")),
   tar_target(ddt_nets_colnas, fread(ddt_nets_colnas_path)),
   
@@ -103,19 +103,48 @@ list(
   ),
   
   tar_target(
-    ddtnets_bvinters_formatted,
+    ddtnets_bvinters_stats,
     format_ddtnets_bvinters(in_ddtnets_bvinters = ddtnets_bvinters)
   ),
   
   tar_target(
-    ddtnet_dep_plots,
-    plot_ddtnet_dep(ddtnets_bvinters_formatted)
+    ddtnets_dep_plots,
+    plot_ddtnet_dep(ddtnets_bvinters_stats$dep_stats)
+  ),
+  
+  #Format the other networks
+  tar_target(
+    carthage_bvinters_stats,
+    format_carthage(in_carthage_bvinters = carthage_bvinters) 
+  ),
+  tar_target(
+    bcae_bvinters_stats,
+    format_bcae(in_bcae_bvinters = bcae_bvinters) 
+  ),
+  tar_target(
+    bdtopo_bvinters_stats,
+    format_bdtopo(in_bdtopo_bvinters = bdtopo_bvinters) 
+  ),
+  tar_target(
+    rht_bvinters_stats,
+    format_rht(in_rht_bvinters = rht_bvinters) 
+  ),
+  tar_target(
+    drainage_density_analysis,
+    analyze_drainage_density(ddtnets_bvinters_stats$bv_stats,
+                             carthage_bvinters_stats,
+                             bcae_bvinters_stats,
+                             bdtopo_bvinters_stats,
+                             rht_bvinters_stats)
+  ),
+  tar_target(
+    drainage_density_plots,
+    plot_drainage_density(in_drainage_density_analysis=drainage_density_analysis)
   )
-    
-
+  
   #------------------------------- Format statistics ---------------------------
   #amber_bvinters[, .N, by=c('LabelAtlas', 'UID_BV')]
-
+  
 )
 
 
