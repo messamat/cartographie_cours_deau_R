@@ -34,15 +34,15 @@ list(
   tar_target(carthage_bvinters_path, file.path(resdir, "TRONCON_HYDROGRAPHIQUE_bvinters.csv"  ),format = 'file'), #Carthage
   tar_target(ddtnets_bvinters_path, file.path(resdir, "carto_loi_eau_fr_bvinters.csv"),format = 'file'), #DDT harmonized networks
   
-  # tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
-  # tar_target(bdforest_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
-  # tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
-  # tar_target(comirrig_bvinters_path, file.path(resdir, "communes_irrig_bvinters.csv"),format = 'file'), #commune-based irrigation
-  # tar_target(bdcharm_bvinters_path, file.path(resdir, "lithology_bdcharm_fr_bvinters.csv"),format = 'file'), #lithology
-  # tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
-  # tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
-  # tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
-  
+  tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
+  tar_target(bdforet_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
+  tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
+  tar_target(comirrig_bvinters_path, file.path(resdir, "com_irrig_bvinters.csv"),format = 'file'), #commune-based irrigation
+  tar_target(bdcharm_bvinters_path, file.path(resdir, "lithology_bdcharm_fr_bvinters.csv"),format = 'file'), #lithology
+  tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
+  tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
+  tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
+
   #Read in DDT metadata
   tar_target(metadata_sources, read_xlsx(path = ddt_metadata_path, sheet="Sources")),
   tar_target(
@@ -65,14 +65,14 @@ list(
   tar_target(ddtnets_bvinters, fread(ddtnets_bvinters_path)), #DDT harmonized networks
   
   #Read in csvs of environmental files
-  # tar_target(amber_bvinters, fread(amber_bvinters_path)), #barriers
-  # tar_target(bdforest_bvinters, fread(bdforest_bvinters_path)), #forest type
-  # tar_target(bdhaies_bvinters, fread(bdhaies_bvinters_path)), #hedges
-  # tar_target(comirrig_bvinters, fread(comirrig_bvinters_path)), #commune-based irrigation
-  # tar_target(bdcharm_bvinters, fread(bdcharm_bvinters_path)), #lithology
-  # tar_target(onde_stations_bvinters, fread(onde_stations_bvinters_path)), #stations of intermittency observation
-  # tar_target(snelder_bvinters, fread(snelder_bvinters_path)),
-  # tar_target(bnpe_bvinters, fread(bnpe_bvinters_path)), #withdrawals
+  tar_target(amber_bvinters, fread(amber_bvinters_path)), #barriers
+  tar_target(bdforet_bvinters, fread(bdforet_bvinters_path)), #forest type
+  tar_target(bdhaies_bvinters, fread(bdhaies_bvinters_path)), #hedges
+  tar_target(comirrig_bvinters, fread(comirrig_bvinters_path)), #commune-based irrigation
+  tar_target(bdcharm_bvinters, fread(bdcharm_bvinters_path)), #lithology
+  tar_target(onde_stations_bvinters, fread(onde_stations_bvinters_path)), #stations of intermittency observation
+  tar_target(snelder_bvinters, fread(snelder_bvinters_path)),
+  tar_target(bnpe_bvinters, fread(bnpe_bvinters_path)), #withdrawals
   
   #Read and merge gdb tables
   tar_target(
@@ -117,26 +117,35 @@ list(
     carthage_bvinters_stats,
     format_carthage(in_carthage_bvinters = carthage_bvinters) 
   ),
+  
   tar_target(
     bcae_bvinters_stats,
     format_bcae(in_bcae_bvinters = bcae_bvinters) 
   ),
+  
   tar_target(
     bdtopo_bvinters_stats,
     format_bdtopo(in_bdtopo_bvinters = bdtopo_bvinters) 
   ),
+  
   tar_target(
     rht_bvinters_stats,
     format_rht(in_rht_bvinters = rht_bvinters) 
   ),
+  
   tar_target(
     drainage_density_analysis,
-    analyze_drainage_density(ddtnets_bvinters_stats$bv_stats,
-                             carthage_bvinters_stats,
-                             bcae_bvinters_stats,
-                             bdtopo_bvinters_stats,
-                             rht_bvinters_stats)
+    analyze_drainage_density(
+      in_dt_list = list(
+        ddtnets = ddtnets_bvinters_stats$bv_stats,
+        carthage = carthage_bvinters_stats,
+        bcae = bcae_bvinters_stats,
+        bdtopo = bdtopo_bvinters_stats,
+        rht = rht_bvinters_stats),
+      outdir = resdir
+    )
   ),
+  
   tar_target(
     drainage_density_plots,
     plot_drainage_density(in_drainage_density_analysis=drainage_density_analysis)

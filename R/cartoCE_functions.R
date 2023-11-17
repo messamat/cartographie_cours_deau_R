@@ -339,34 +339,130 @@ format_bdtopo <- function(in_bdtopo_bvinters) {
   return(bdtopo_bv_stats)
 }
 
+#-------------------------- format amber ---------------------------------------
+format_amber <- function(in_amber_bvinters,
+                         id_cols) {
+  #summary(in_amber_bvinters)
+  amber_fr <- in_amber_bvinters[Country == 'FRANCE',] %>%
+    setnames('NOM', 'NOM_DEP')
+  barriers_bv <- amber_fr[, list(n_barriers = .N), by=c('LabelAtlas', 'UID_BV')]
+  return(barriers_bv)
+}
+#-------------------------- format bdforet ---------------------------------------
+format_bdforet <- function(in_bdforet_bvinters) {
+  #names(bdforet_bvinters)
+  
+  #TFV_G11: cet attribut renseigne en 11 postes le type de couverture et la 
+  #composition générale de la formation végétale en fonction des niveaux I,II et
+  #III du code TFV. Il s’agit d’un regroupement de types de formation végétale.
+  forest_bv <- bdforet_bvinters[, list(forest_cat_area = sum(Shape_Area)),  
+                               by=c('TFV_G11', 'UID_BV')] %>%
+    .[, forest_total_area := sum(forest_cat_area), by=UID_BV] %>%
+    .[, forest_cat_percarea := forest_cat_area/forest_total_area]
+  return(forest_bv)
+}
+
+#-------------------------- format irrigation data -----------------------------
+format_irrig <- function(in_comirrig_bvinters) {
+  names(comirrig_bvinters)
+
+  #-------------- Assign irrigated area to BVs ---------------------------------
+  #Compute the area of primary irrigated crops and the total agricultural area
+  #in the BV-commune intersections
+  # According to the agricultural census, the following crops had more than 10% 
+  #of their surface area irrigated in 2020: Corn, Vegetables, Orchards, Potatoes, Beets, Soy,
+  # https://agreste.agriculture.gouv.fr/agreste-web/download/publication/publie/GraFra2022Chap3.1/GraFra2022_pratiques-culturales.pdf
+  comirrig_bvinters[, `:=`(
+    primary_irrcrops_area_bvcom=
+      Shape_Area*(VALUE_8 + VALUE_10 + VALUE_12 + VALUE_14)/(10^6*rowSums(.SD)),
+    crops_area_bvcom = 
+      Shape_Area*(VALUE_5 + VALUE_6 + VALUE_7 + VALUE_8 + VALUE_9 + VALUE_10 
+                  + VALUE_11+ VALUE_12 + VALUE_13 + VALUE_14)/(10^6*rowSums(.SD))
+  ),
+  .SDcols = grep("^VALUE_[0-9]{1,2}$", names(comirrig_bvinters), perl=T, value=T)
+  ]
+
+  
+  #Compute the total area of these land covers in each commune  
+  comirrig_bvinters[, `:=`(
+    primary_irrcrops_area_com = sum(primary_irrcrops_area_bvcom),
+    crops_area_com = sum(crops_area_bvcom)
+  ), by='INSEE_COM'
+  ]
+
+  #Compute the percent area equivalents by bvcom/com
+  comirrig_bvinters[
+    , 
+    bvcom_percirrig := fcase(
+      primary_irrcrops_area_com > 0, primary_irrcrops_area_bvcom/primary_irrcrops_area_com,
+      crops_area_com > 0, crops_area_bvcom/crops_area_com,
+      default = 0
+    )
+  ]
+  
+  #There are some communes for which the SAU exceeds the commune area
+  #leading to irrig_area_com_all > COMMUNE_AREA
+  comirrig_bvinters[(irrig_area_com_all/100)/COMMUNE_AREA>1,
+                    irrig_area_com_all := 0.95*COMMUNE_AREA*100]
+  
+  
+  # Compute the irrigated area in each BV as the sum across all communes that 
+  #intersect this BV of the product between the total irrigated area in the 
+  #commune and the percentage of potentially irrigated crops from that commune 
+  #in that BV
+  irrig_bv <- comirrig_bvinters[, list(
+    irrig_area =sum(irrig_area_com_all*bvcom_percirrig/100)
+    ), by=UID_BV
+  ]
+  
+  return(irrig_bv)
+}
+
+#-------------------------- format bd charm -----------------------------
+bdcharm_bvinters <- tar_read(bdcharm_bvinters) #lithology
+onde_stations_bvinters <- tar_read(onde_stations_bvinters) #stations of intermittency observation
+snelder_bvinters <- tar_read(snelder_bvinters)
+bnpe_bvinters <- tar_read(bnpe_bvinters) #withdrawals
+
+format_bdcharm <- function(in_bdcharm_bvinters) {
+  names(bdcharm_bvinters)
+  check <- bdcharm_bvinters[, .N, by=NOTATION]  
+}
+
+format_onde <- function(in_bdforet_bvinters) {
+}
+
+format_snelder <- function(in_bdforet_bvinters) {
+}
+
+format_bnpe <- function(in_bdforet_bvinters) {
+}
+
+
 ###################### ANALYZE DRAINAGE DENSITY ################################
 #-------------------------- analyze_drainage_density ---------------------------
-
+# 
 # in_ddtnets_stats <- tar_read(ddtnets_bvinters_stats)$bv_stats
 # in_carthage_stats <- tar_read(carthage_bvinters_stats)
 # in_bcae_stats <- tar_read(bcae_bvinters_stats)
 # in_bdtopo_stats <- tar_read(bdtopo_bvinters_stats)
 # in_rht_stats <- tar_read(rht_bvinters_stats)
 # id_cols <- c('UID_BV', 'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM_DEP')
-
 # 
-# in_dt_list <- list(in_ddtnets_stats=in_ddtnets_stats,
-#                    in_carthage_stats=in_carthage_stats,
-#                    in_bcae_stats=in_bcae_stats,
-#                    in_bdtopo_stats=in_bdtopo_stats,
-#                    in_rht_stats=in_rht_stats)
-analyze_drainage_density <- function(in_ddtnets_stats,
-                                     in_carthage_stats,
-                                     in_bcae_stats,
-                                     in_bdtopo_stats,
-                                     in_rht_stats) {
-  in_dt_list <- c(as.list(environment()))
+# 
+# in_dt_list <- list(ddtnets=in_ddtnets_stats,
+#                    carthage=in_carthage_stats,
+#                    bcae=in_bcae_stats,
+#                    bdtopo=in_bdtopo_stats,
+#                    rht=in_rht_stats)
+analyze_drainage_density <- function(in_dt_list, outdir) {
+  #in_dt_list <- c(as.list(environment()))
 
   id_cols <- c('UID_BV', 'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM_DEP')
   
   
   #Only keep cours d'eau and
-  in_dt_list[['in_ddtnets_stats']] <- in_dt_list[['in_ddtnets_stats']][
+  in_dt_list[['ddtnets']] <- in_dt_list[['ddtnets']][
     type_stand %in% c("Cours d'eau", "Indéterminé"),
   ]
   
@@ -383,12 +479,12 @@ analyze_drainage_density <- function(in_ddtnets_stats,
     set_suffix = TRUE
   ) %>%
     .[!(INSEE_DEP %in% c(92, 93, 94)),] %>%   #Remove departments from ile de france included with Paris
-    merge(in_dt_list[['in_ddtnets_stats']][
+    merge(in_dt_list[['ddtnets']][
       !duplicated(UID_BV)
       , c('UID_BV', 'per_ce', 'per_ind', 'per_nce', 'per_int'), with=F],
       by='UID_BV')  %>%
-    setnames(c('length_bv_in_carthage_stats', 'length_bv_in_bcae_stats',
-               'length_bv_in_bdtopo_stats', 'length_bv_in_rht_stats'),
+    setnames(c('length_bv_carthage', 'length_bv_bcae',
+               'length_bv_bdtopo', 'length_bv_rht'),
              c('carthage', 'bcae', 'bdtopo', 'rht'))
   
   
@@ -396,25 +492,25 @@ analyze_drainage_density <- function(in_ddtnets_stats,
   
   nets_stats_melt <- melt(
     nets_stats_merged_bv,
-    id.vars = c(id_cols, 'length_bv_in_ddtnets_stats', ddt_cats)
+    id.vars = c(id_cols, 'length_bv_ddtnets', ddt_cats),
   ) %>%
     .[, variable := factor(variable,
                            levels=c('bdtopo', 'carthage', 'bcae', 'rht'))]
   
   
   nets_stats_melt_b8 <-nets_stats_melt[, list(
-    length_ddtnets = sum(length_bv_in_ddtnets_stats, na.rm=T),
+    length_ddtnets = sum(length_bv_ddtnets, na.rm=T),
     length_others = sum(value, na.rm=T)
   ), by=c('PFAF_ID08', 'INSEE_DEP', 'NOM_DEP', 'variable')]
   
   nets_stats_melt_dep <-nets_stats_melt[
     ,
     list(
-      length_ddtnets = sum(length_bv_in_ddtnets_stats, na.rm=T),
+      length_ddtnets = sum(length_bv_ddtnets, na.rm=T),
       length_others = sum(value, na.rm=T),
-      per_ce = sum(length_bv_in_ddtnets_stats*per_ce)/sum(length_bv_in_ddtnets_stats, na.rm=T),
-      per_ind = sum(length_bv_in_ddtnets_stats*per_ind)/sum(length_bv_in_ddtnets_stats, na.rm=T),
-      per_nce = sum(length_bv_in_ddtnets_stats*per_ind)/sum(length_bv_in_ddtnets_stats, na.rm=T)
+      per_ce = sum(length_bv_ddtnets*per_ce)/sum(length_bv_ddtnets, na.rm=T),
+      per_ind = sum(length_bv_ddtnets*per_ind)/sum(length_bv_ddtnets, na.rm=T),
+      per_nce = sum(length_bv_ddtnets*per_ind)/sum(length_bv_ddtnets, na.rm=T)
     ), by=c('INSEE_DEP', 'NOM_DEP', 'variable')] %>%
     .[, lengthratio_ddt_to_other := length_ddtnets/length_others,] %>%
     .[, lengthratio_ddt_to_other_standardized :=
@@ -428,6 +524,17 @@ analyze_drainage_density <- function(in_ddtnets_stats,
       INSEE_DEP = INSEE_DEP
     )],
     by=c('INSEE_DEP'))
+  
+  
+  nets_stats_merged_bv[, `:=`(
+    ddt_to_carthage_ddratio =  length_bv_ddtnets/carthage,
+    ddt_to_bcae_ddratio =  length_bv_ddtnets/bcae,
+    ddt_to_bdtopo_ddratio =  length_bv_ddtnets/bdtopo,
+    ddt_to_rht_ddratio =  length_bv_ddtnets/rht
+  )]
+  
+  fwrite(nets_stats_merged_bv,
+         file.path(outdir, 'nets_stats_bv.csv'))
   
   return(list(
     nets_stats_merged_bv=nets_stats_merged_bv,
@@ -445,7 +552,7 @@ plot_drainage_density <- function(in_drainage_density_analysis) {
   plot_dd_scatter_bv <- ggplot(
     in_dtlist$nets_stats_melt,
     aes(x=value,
-        y=length_bv_in_ddtnets_stats, color=variable
+        y=length_bv_ddtnets, color=variable
     )) +
     geom_point(alpha=1/3) +
     #geom_smooth(method='rlm',color='white',alpha=0.5) +
@@ -525,6 +632,5 @@ plot_drainage_density <- function(in_drainage_density_analysis) {
     plot_ddratio_standardized_dep
   ))
 }
-
 
 
