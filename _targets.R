@@ -38,11 +38,12 @@ list(
   tar_target(bdforet_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
   tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
   tar_target(comirrig_bvinters_path, file.path(resdir, "com_irrig_bvinters.csv"),format = 'file'), #commune-based irrigation
-  tar_target(bdcharm_bvinters_path, file.path(resdir, "lithology_bdcharm_fr_bvinters.csv"),format = 'file'), #lithology
+  tar_target(bdcharm_bvinters_path, file.path(resdir, "GEO050K_HARM_merge_bvinters.csv"),format = 'file'), #lithology
   tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
   tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
   tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
-
+  tar_target(bnpe_timeseries_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_chroniques.csv')),
+  
   #Read in DDT metadata
   tar_target(metadata_sources, read_xlsx(path = ddt_metadata_path, sheet="Sources")),
   tar_target(
@@ -73,6 +74,7 @@ list(
   tar_target(onde_stations_bvinters, fread(onde_stations_bvinters_path)), #stations of intermittency observation
   tar_target(snelder_bvinters, fread(snelder_bvinters_path)),
   tar_target(bnpe_bvinters, fread(bnpe_bvinters_path)), #withdrawals
+  tar_target(bnpe_timeseries, fread(bnpe_timeseries_path)),
   
   #Read and merge gdb tables
   tar_target(
@@ -97,6 +99,32 @@ list(
       Reduce(function(x, y) merge(x, y, by="UID_BV"), .)
   )
   ,
+  tar_target(
+    barriers_formatted,
+    format_amber(amber_bvinters)
+  ),
+  tar_target(
+    forest_formatted,
+    format_bdforet(bdforet_bvinters)
+    ),
+  tar_target(
+    irrig_formatted,
+    format_irrig(comirrig_bvinters)
+  ),
+  tar_target(
+    lithology_formatted,
+    format_bdcharm(bdcharm_bvinters)
+  ),
+  tar_target(
+    ires_formatted,
+    format_snelder(snelder_bvinters)
+  ),
+  tar_target(
+    withdrawals_formatted,
+    format_bnpe(bnpe_bvinters, bnpe_timeseries)
+  ),
+  
+
   tar_target(
     metadata_nets_formatted,
     format_metadata_nets(metadata_nets)

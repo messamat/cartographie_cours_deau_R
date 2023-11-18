@@ -355,7 +355,7 @@ format_bdforet <- function(in_bdforet_bvinters) {
   #TFV_G11: cet attribut renseigne en 11 postes le type de couverture et la 
   #composition générale de la formation végétale en fonction des niveaux I,II et
   #III du code TFV. Il s’agit d’un regroupement de types de formation végétale.
-  forest_bv <- bdforet_bvinters[, list(forest_cat_area = sum(Shape_Area)),  
+  forest_bv <- in_bdforet_bvinters[, list(forest_cat_area = sum(Shape_Area)),  
                                by=c('TFV_G11', 'UID_BV')] %>%
     .[, forest_total_area := sum(forest_cat_area), by=UID_BV] %>%
     .[, forest_cat_percarea := forest_cat_area/forest_total_area]
@@ -364,7 +364,7 @@ format_bdforet <- function(in_bdforet_bvinters) {
 
 #-------------------------- format irrigation data -----------------------------
 format_irrig <- function(in_comirrig_bvinters) {
-  names(comirrig_bvinters)
+  #names(in_comirrig_bvinters)
 
   #-------------- Assign irrigated area to BVs ---------------------------------
   #Compute the area of primary irrigated crops and the total agricultural area
@@ -372,26 +372,26 @@ format_irrig <- function(in_comirrig_bvinters) {
   # According to the agricultural census, the following crops had more than 10% 
   #of their surface area irrigated in 2020: Corn, Vegetables, Orchards, Potatoes, Beets, Soy,
   # https://agreste.agriculture.gouv.fr/agreste-web/download/publication/publie/GraFra2022Chap3.1/GraFra2022_pratiques-culturales.pdf
-  comirrig_bvinters[, `:=`(
+  in_comirrig_bvinters[, `:=`(
     primary_irrcrops_area_bvcom=
       Shape_Area*(VALUE_8 + VALUE_10 + VALUE_12 + VALUE_14)/(10^6*rowSums(.SD)),
     crops_area_bvcom = 
       Shape_Area*(VALUE_5 + VALUE_6 + VALUE_7 + VALUE_8 + VALUE_9 + VALUE_10 
                   + VALUE_11+ VALUE_12 + VALUE_13 + VALUE_14)/(10^6*rowSums(.SD))
   ),
-  .SDcols = grep("^VALUE_[0-9]{1,2}$", names(comirrig_bvinters), perl=T, value=T)
+  .SDcols = grep("^VALUE_[0-9]{1,2}$", names(in_comirrig_bvinters), perl=T, value=T)
   ]
 
   
   #Compute the total area of these land covers in each commune  
-  comirrig_bvinters[, `:=`(
+  in_comirrig_bvinters[, `:=`(
     primary_irrcrops_area_com = sum(primary_irrcrops_area_bvcom),
     crops_area_com = sum(crops_area_bvcom)
   ), by='INSEE_COM'
   ]
 
   #Compute the percent area equivalents by bvcom/com
-  comirrig_bvinters[
+  in_comirrig_bvinters[
     , 
     bvcom_percirrig := fcase(
       primary_irrcrops_area_com > 0, primary_irrcrops_area_bvcom/primary_irrcrops_area_com,
@@ -402,7 +402,7 @@ format_irrig <- function(in_comirrig_bvinters) {
   
   #There are some communes for which the SAU exceeds the commune area
   #leading to irrig_area_com_all > COMMUNE_AREA
-  comirrig_bvinters[(irrig_area_com_all/100)/COMMUNE_AREA>1,
+  in_comirrig_bvinters[(irrig_area_com_all/100)/COMMUNE_AREA>1,
                     irrig_area_com_all := 0.95*COMMUNE_AREA*100]
   
   
@@ -410,7 +410,7 @@ format_irrig <- function(in_comirrig_bvinters) {
   #intersect this BV of the product between the total irrigated area in the 
   #commune and the percentage of potentially irrigated crops from that commune 
   #in that BV
-  irrig_bv <- comirrig_bvinters[, list(
+  irrig_bv <- in_comirrig_bvinters[, list(
     irrig_area =sum(irrig_area_com_all*bvcom_percirrig/100)
     ), by=UID_BV
   ]
@@ -419,25 +419,77 @@ format_irrig <- function(in_comirrig_bvinters) {
 }
 
 #-------------------------- format bd charm -----------------------------
-bdcharm_bvinters <- tar_read(bdcharm_bvinters) #lithology
-onde_stations_bvinters <- tar_read(onde_stations_bvinters) #stations of intermittency observation
-snelder_bvinters <- tar_read(snelder_bvinters)
-bnpe_bvinters <- tar_read(bnpe_bvinters) #withdrawals
-
 format_bdcharm <- function(in_bdcharm_bvinters) {
-  names(bdcharm_bvinters)
-  check <- bdcharm_bvinters[, .N, by=NOTATION]  
+  unique(in_bdcharm_bvinters$DESCR)
+  check <- in_bdcharm_bvinters[, .N, by=DESCR]
+
+  #Get the three most prevalent geological formations in BV and the % area that
+  #they represent
+  lit_cl_smj <- in_bdcharm_bvinters[, list(
+    lit_areasum = sum(Shape_Area, na.rm=T))
+    , by=c('NOTATION', 'UID_BV')] %>%
+    .[, lit_areaper := lit_areasum/sum(lit_areasum), by=c('UID_BV')] %>%
+    .[order(-lit_areaper), list(
+      lit_cl_s1 = .SD[1, NOTATION],
+      lit_cl_s1per = .SD[1, lit_areaper],
+      lit_cl_s2 = .SD[2, NOTATION],
+      lit_cl_s2per = .SD[2, lit_areaper],
+      lit_cl_s3 = .SD[3, NOTATION],
+      lit_cl_s3per = .SD[3, lit_areaper]
+    ), by=UID_BV]
+
+  #Check the total proportion of the BV's area made up by the three top lithology
+  #>50% for >90% of BVs
+  lit_cl_smj[, lit_cl_3sum := sum(lit_cl_s1per, lit_cl_s2per, lit_cl_s3per, na.rm=T),
+             by=UID_BV]
+
+  return(lit_cl_smj)
 }
 
-format_onde <- function(in_bdforet_bvinters) {
+#-------------------------- format snelder ires data -----------------------------
+#in_snelder_bvinters <- tar_read(snelder_bvinters)
+format_snelder <- function(in_snelder_bvinters) {
+  rht_snelder_stats  <- in_snelder_bvinters[
+    , 
+    list(irs_pc_sav = sum(V1*Shape_Length)/sum(Shape_Length),
+         dis_m3_yr = max(MODULE)),
+    by='UID_BV'
+  ]
+  return(rht_snelder_stats)
 }
 
-format_snelder <- function(in_bdforet_bvinters) {
+
+#-------------------------- format bnpe withdrawal data -----------------------------
+# in_bnpe_bvinters <- tar_read(bnpe_bvinters) #withdrawals
+# in_bnpe_timeseries <- tar_read(bnpe_timeseries)
+format_bnpe <- function(in_bnpe_bvinters,
+                        in_bnpe_timeseries) {
+  names(in_bnpe_bvinters)
+  
+  bnpe_ts_bv <- merge(in_bnpe_timeseries,
+                      in_bnpe_bvinters[, .(code_ouvrage, UID_BV, libelle_type_milieu)],
+                      by='code_ouvrage',
+                      all.x=T)
+  check <-  bnpe_ts_bv[is.na(UID_BV),]
+  
+  names(in_bnpe_timeseries)
+  
+  
+  
 }
 
-format_bnpe <- function(in_bdforet_bvinters) {
-}
+#-------------------------- Compile all environmental variables in one table ----
+# in_envlist <- list(
+#   env_gdbtabs
+#   
+#   
+# )
 
+
+compile_all_env <- function(in_envlist) {
+  
+  
+}
 
 ###################### ANALYZE DRAINAGE DENSITY ################################
 #-------------------------- analyze_drainage_density ---------------------------
