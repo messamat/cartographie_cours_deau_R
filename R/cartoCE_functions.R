@@ -153,8 +153,7 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters) {
   #Summarize length of lines by attributes
   bv_stats <- in_ddtnets_bvinters[
     , list(n_lines = .N,
-           length_cat_bv = sum(geom_Length),
-           bvs_area = sum(POLY_AREA)
+           length_cat_bv = sum(geom_Length)
     ),
     by=c('UID_BV', 'type_stand', 'regime_formatted', 
          'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM')
@@ -259,8 +258,7 @@ format_carthage <- function(in_carthage_bvinters) {
   #Summarize length of lines by attributes
   carthage_bv_stats <- carthage_bvinters_sub[
     , list(n_lines = .N,
-           length_cat_bv = sum(Shape_Length),
-           bvs_area = sum(POLY_AREA)
+           length_cat_bv = sum(Shape_Length)
     ),
     by=c('UID_BV', 'NATURE', 'ETAT', 
          'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM')
@@ -281,8 +279,7 @@ format_bcae <- function(in_bcae_bvinters) {
   #Summarize length of lines by attributes
   bcae_bv_stats <- in_bcae_bvinters[
     , list(n_lines = .N,
-           length_cat_bv = sum(Shape_Length),
-           bvs_area = sum(POLY_AREA)
+           length_cat_bv = sum(Shape_Length)
     ),
     by=c('UID_BV', 'ORIGINE1', 'ORIGINE2',
          'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM')
@@ -305,8 +302,7 @@ format_rht <- function(in_rht_bvinters) {
   #Summarize length of lines by attributes
   rht_bv_stats <- in_rht_bvinters[
     , list(n_lines = .N,
-           length_cat_bv = sum(Shape_Length),
-           bvs_area = sum(POLY_AREA)
+           length_cat_bv = sum(Shape_Length)
     ),
     by=c('UID_BV', 'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM')
   ] %>%
@@ -326,8 +322,7 @@ format_bdtopo <- function(in_bdtopo_bvinters) {
   #Summarize length of lines by attributes
   bdtopo_bv_stats <- in_bdtopo_bvinters[
     , list(n_lines = .N,
-           length_cat_bv = sum(Shape_Length),
-           bvs_area = sum(POLY_AREA)
+           length_cat_bv = sum(Shape_Length)
     ),
     by=c('UID_BV', 'ARTIF', 'FICTIF', 'REGIME',
          'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM_1')
@@ -340,15 +335,25 @@ format_bdtopo <- function(in_bdtopo_bvinters) {
 }
 
 #-------------------------- format amber ---------------------------------------
+#in_amber_bvinters <- tar_read(amber_bvinters)
 format_amber <- function(in_amber_bvinters,
                          id_cols) {
   #summary(in_amber_bvinters)
   amber_fr <- in_amber_bvinters[Country == 'FRANCE',] %>%
     setnames('NOM', 'NOM_DEP')
-  barriers_bv <- amber_fr[, list(n_barriers = .N), by=c('LabelAtlas', 'UID_BV')]
+  
+  barriers_bv <- amber_fr[,  .N, by=c('LabelAtlas', 'UID_BV')] %>%
+    dcast(UID_BV~LabelAtlas, value.var='N', fill=0) %>%
+    .[, TOTAL := rowSums(.SD), by=UID_BV]
+  
+  oldcols <- c(unique(amber_fr$LabelAtlas), 'TOTAL')
+  newcols <- paste0('n_barriers_', oldcols)
+  setnames(barriers_bv, oldcols, newcols)
+  
   return(barriers_bv)
 }
 #-------------------------- format bdforet ---------------------------------------
+#in_bdforet_bvinters <- tar_read(bdforet_bvinters)
 format_bdforet <- function(in_bdforet_bvinters) {
   #names(bdforet_bvinters)
   
@@ -356,16 +361,27 @@ format_bdforet <- function(in_bdforet_bvinters) {
   #composition générale de la formation végétale en fonction des niveaux I,II et
   #III du code TFV. Il s’agit d’un regroupement de types de formation végétale.
   forest_bv <- in_bdforet_bvinters[, list(forest_cat_area = sum(Shape_Area)),  
-                               by=c('TFV_G11', 'UID_BV')] %>%
-    .[, forest_total_area := sum(forest_cat_area), by=UID_BV] %>%
-    .[, forest_cat_percarea := forest_cat_area/forest_total_area]
+                                   by=c('TFV_G11', 'UID_BV')] %>%
+    .[, forest_total_area := sum(forest_cat_area, na.rm=T), by=UID_BV] %>%
+    .[, forest_cat_percarea := forest_cat_area/forest_total_area] %>%
+    .[order(-forest_cat_percarea), list(
+      for_cl_s1 = .SD[1, TFV_G11],
+      for_cl_s1pc = .SD[1, forest_cat_percarea],
+      for_cl_s2 = .SD[2, TFV_G11],
+      for_cl_s2pc = .SD[2, forest_cat_percarea],
+      for_cl_s3 = .SD[3, TFV_G11],
+      for_cl_s3pc = .SD[3, forest_cat_percarea]
+    ), by=UID_BV] 
+  
+  # check <- forest_bv[, rowSums(.SD), .SDcols = c('for_cl_s1per')]
+  # quantile(check, 0.1, na.rm=T)
   return(forest_bv)
 }
 
 #-------------------------- format irrigation data -----------------------------
 format_irrig <- function(in_comirrig_bvinters) {
   #names(in_comirrig_bvinters)
-
+  
   #-------------- Assign irrigated area to BVs ---------------------------------
   #Compute the area of primary irrigated crops and the total agricultural area
   #in the BV-commune intersections
@@ -381,7 +397,7 @@ format_irrig <- function(in_comirrig_bvinters) {
   ),
   .SDcols = grep("^VALUE_[0-9]{1,2}$", names(in_comirrig_bvinters), perl=T, value=T)
   ]
-
+  
   
   #Compute the total area of these land covers in each commune  
   in_comirrig_bvinters[, `:=`(
@@ -389,7 +405,7 @@ format_irrig <- function(in_comirrig_bvinters) {
     crops_area_com = sum(crops_area_bvcom)
   ), by='INSEE_COM'
   ]
-
+  
   #Compute the percent area equivalents by bvcom/com
   in_comirrig_bvinters[
     , 
@@ -403,7 +419,7 @@ format_irrig <- function(in_comirrig_bvinters) {
   #There are some communes for which the SAU exceeds the commune area
   #leading to irrig_area_com_all > COMMUNE_AREA
   in_comirrig_bvinters[(irrig_area_com_all/100)/COMMUNE_AREA>1,
-                    irrig_area_com_all := 0.95*COMMUNE_AREA*100]
+                       irrig_area_com_all := 0.95*COMMUNE_AREA*100]
   
   
   # Compute the irrigated area in each BV as the sum across all communes that 
@@ -412,7 +428,7 @@ format_irrig <- function(in_comirrig_bvinters) {
   #in that BV
   irrig_bv <- in_comirrig_bvinters[, list(
     irrig_area =sum(irrig_area_com_all*bvcom_percirrig/100)
-    ), by=UID_BV
+  ), by=UID_BV
   ]
   
   return(irrig_bv)
@@ -422,7 +438,7 @@ format_irrig <- function(in_comirrig_bvinters) {
 format_bdcharm <- function(in_bdcharm_bvinters) {
   unique(in_bdcharm_bvinters$DESCR)
   check <- in_bdcharm_bvinters[, .N, by=DESCR]
-
+  
   #Get the three most prevalent geological formations in BV and the % area that
   #they represent
   lit_cl_smj <- in_bdcharm_bvinters[, list(
@@ -431,18 +447,18 @@ format_bdcharm <- function(in_bdcharm_bvinters) {
     .[, lit_areaper := lit_areasum/sum(lit_areasum), by=c('UID_BV')] %>%
     .[order(-lit_areaper), list(
       lit_cl_s1 = .SD[1, NOTATION],
-      lit_cl_s1per = .SD[1, lit_areaper],
+      lit_cl_s1pc = .SD[1, lit_areaper],
       lit_cl_s2 = .SD[2, NOTATION],
-      lit_cl_s2per = .SD[2, lit_areaper],
+      lit_cl_s2pc = .SD[2, lit_areaper],
       lit_cl_s3 = .SD[3, NOTATION],
-      lit_cl_s3per = .SD[3, lit_areaper]
+      lit_cl_s3pc = .SD[3, lit_areaper]
     ), by=UID_BV]
-
+  
   #Check the total proportion of the BV's area made up by the three top lithology
   #>50% for >90% of BVs
-  lit_cl_smj[, lit_cl_3sum := sum(lit_cl_s1per, lit_cl_s2per, lit_cl_s3per, na.rm=T),
-             by=UID_BV]
-
+  # lit_cl_smj[, lit_cl_3sum := sum(lit_cl_s1per, lit_cl_s2per, lit_cl_s3per, na.rm=T),
+  #            by=UID_BV]
+  
   return(lit_cl_smj)
 }
 
@@ -460,56 +476,155 @@ format_snelder <- function(in_snelder_bvinters) {
 
 
 #-------------------------- format bnpe withdrawal data -----------------------------
-# in_bnpe_bvinters <- tar_read(bnpe_bvinters) #withdrawals
-# in_bnpe_timeseries <- tar_read(bnpe_timeseries)
 format_bnpe <- function(in_bnpe_bvinters,
-                        in_bnpe_timeseries) {
-  names(in_bnpe_bvinters)
+                        in_bnpe_timeseries,
+                        in_bnpe_ouvrages) {
+  #names(in_bnpe_bvinters)
+  
+  #The ones that drop out are off the coast or in estuaries  
+  # in_bnpe_timeseries[!code_ouvrage %in% in_bnpe_bvinters$code_ouvrage,
+  #                    unique(code_ouvrage)]
   
   bnpe_ts_bv <- merge(in_bnpe_timeseries,
-                      in_bnpe_bvinters[, .(code_ouvrage, UID_BV, libelle_type_milieu)],
+                      in_bnpe_bvinters[, .(code_ouvrage, UID_BV)],
                       by='code_ouvrage',
-                      all.x=T)
-  check <-  bnpe_ts_bv[is.na(UID_BV),]
+                      all.x=T) %>%
+    merge(in_bnpe_ouvrages[, .(code_ouvrage, libelle_type_milieu)],
+          by='code_ouvrage',
+          all.x=T) 
   
-  names(in_bnpe_timeseries)
+  bnpe_bv_stats <- bnpe_ts_bv[, list(
+    mean_vol = mean(volume, na.rm=T)),
+    by=c('code_ouvrage', 'libelle_type_milieu', 
+         'libelle_usage', 'UID_BV')] %>%
+    .[, list(vww_mk_syr = sum(mean_vol)),
+      by=c('libelle_type_milieu', 'libelle_usage', 'UID_BV')] %>%
+    .[, type := gsub(' ', '_', 
+                     paste(libelle_type_milieu,
+                           libelle_usage
+                     ))] %>%
+    dcast(UID_BV~type, value.var='vww_mk_syr', fill=0)
   
   
+  oldcols <-names(bnpe_bv_stats[,-c('UID_BV'),with=F])
+  setnames(bnpe_bv_stats,  oldcols, paste0('vww_mk_syr_', oldcols))
   
+  return(bnpe_bv_stats)
 }
 
-#-------------------------- Compile all environmental variables in one table ----
+#-------------------------- compile all environmental variables in one table ----
+# tar_load(bvdep_inters)
+# tar_load(env_gdbtabs)
+# tar_load(barriers_formatted)
+# tar_load(lithology_formatted)
+# tar_load(forest_formatted)
+# tar_load(ires_formatted)
+# tar_load(withdrawals_formatted)
+# 
+# in_bvdep_inters <- tar_read(bvdep_inters)
 # in_envlist <- list(
-#   env_gdbtabs
-#   
-#   
+#   env_gdbtabs=env_gdbtabs
+#   , barriers_formatted=barriers_formatted
+#   , lithology_formatted=lithology_formatted
+#   , forest_formatted=forest_formatted
+#   , ires_formatted=ires_formatted
+#   , withdrawals_formatted=withdrawals_formatted
 # )
 
+compile_all_env <- function(in_bvdep_inters,
+                            in_envlist) {
+  in_envlist$env_gdbtabs <- merge(in_envlist$env_gdbtabs,
+                                  in_bvdep_inters[, .(UID_BV, POLY_AREA)],
+                                  by='UID_BV')
+  
+  in_envlist$env_gdbtabs <- in_envlist$env_gdbtabs[
+    , list(
+      bv_area_km2 = POLY_AREA
+      , slo_dg_sav = MEAN_slo_dg_sav
+      , ari_ix_ssu = MEAN_ari_ix_ssu/10000
+      , ari_ix_syr = MEAN_ari_ix_syr/10000
+      , ppc_pk_sav = SUM_ppc_in_sav/AREA_ppc_in_sav
+      , awc_mm_sav = MEAN_awc_mm_sav0_5 + MEAN_awc_mm_sav5_15 +
+        MEAN_awc_mm_sav15_30 + MEAN_awc_mm_sav30_60 +
+        MEAN_awc_mm_sav60_100 + MEAN_awc_mm_sav100_200
+      , cly_pc_sav = ((MEAN_cly_pc_sav0_5*5) + (MEAN_cly_pc_sav5_15*10) +
+                        (MEAN_cly_pc_sav15_30*15) + (MEAN_cly_pc_sav30_60*30) +
+                        (MEAN_cly_pc_sav60_100*40) + (MEAN_cly_pc_sav100_200*100)
+                      )/200
+      , snd_pc_sav = ((MEAN_snd_pc_sav0_5*5) + (MEAN_snd_pc_sav5_15*10) +
+                        (MEAN_snd_pc_sav15_30*15) + (MEAN_snd_pc_sav30_60*30) +
+                        (MEAN_snd_pc_sav60_100*40) + (MEAN_snd_pc_sav100_200*100)
+                      )/200
+      , slt_pc_sav = ((MEAN_slt_pc_sav0_5*5) + (MEAN_slt_pc_sav5_15*10) +
+                        (MEAN_slt_pc_sav15_30*15) + (MEAN_slt_pc_sav30_60*30) +
+                        (MEAN_slt_pc_sav60_100*40) + (MEAN_slt_pc_sav100_200*100)
+      )/200
+      , pst_pc_sse = (VALUE_13_lc_pc_s19+VALUE_13_lc_pc_s19+VALUE_13_lc_pc_s19)/
+        (3*(10^6)*POLY_AREA)
+      , vny_pc_sse = (VALUE_15_lc_pc_s19+VALUE_15_lc_pc_s19+VALUE_15_lc_pc_s19)/
+        (3*(10^6)*POLY_AREA)
+      , wet_pc_sse = (VALUE_23_lc_pc_s19+VALUE_23_lc_pc_s19+VALUE_23_lc_pc_s19)/
+        (3*(10^6)*POLY_AREA)
+      , gla_pc_sse = (VALUE_22_lc_pc_s19+VALUE_22_lc_pc_s19+VALUE_22_lc_pc_s19)/
+        (3*(10^6)*POLY_AREA)
+      ),
+    by=UID_BV] %>%
+    merge(
+      in_envlist$env_gdbtabs[, list(UID_BV=UID_BV,
+        veg_pc_sse = rowSums(.SD)/(3*(10^6)*POLY_AREA)),
+        .SDcols = paste0(rep('VALUE_', 12), 16:19, 
+                                     rep('_lc_pc_s',12), 19:21)],
+      by='UID_BV'
+    ) %>%
+    merge(
+      in_envlist$env_gdbtabs[, list(UID_BV=UID_BV,
+                                    imp_pc_sse = rowSums(.SD)/(3*(10^6)*POLY_AREA)),
+                             .SDcols = paste0(rep('VALUE_', 12), 1:4, 
+                                              rep('_lc_pc_s',12), 19:21)],
+      by='UID_BV'
+    ) %>%
+    merge(
+      in_envlist$env_gdbtabs[, list(UID_BV=UID_BV,
+                                    agr_pc_sse = rowSums(.SD)/(3*(10^6)*POLY_AREA)),
+                             .SDcols = paste0(rep('VALUE_', 12), 5:16, 
+                                              rep('_lc_pc_s',12), 19:21)],
+      by='UID_BV'
+    ) %>%
+    merge(
+      in_envlist$env_gdbtabs[, list(UID_BV=UID_BV,
+                                    scr_pc_sse = rowSums(.SD)/(3*(10^6)*POLY_AREA)),
+                             .SDcols = paste0(rep('VALUE_', 12), 8:13, 
+                                              rep('_lc_pc_s',12), 19:21)],
+      by='UID_BV'
+    )
 
-compile_all_env <- function(in_envlist) {
+
+  out_tab_bv <- Reduce(function(x, y) merge(x, y, by="UID_BV", all.x=T, all.y=T),
+                    in_envlist)
   
-  
+  return(out_tab_bv)
 }
 
 ###################### ANALYZE DRAINAGE DENSITY ################################
-#-------------------------- analyze_drainage_density ---------------------------
+#-------------------------- summarize_drainage_density ---------------------------
 # 
 # in_ddtnets_stats <- tar_read(ddtnets_bvinters_stats)$bv_stats
 # in_carthage_stats <- tar_read(carthage_bvinters_stats)
 # in_bcae_stats <- tar_read(bcae_bvinters_stats)
 # in_bdtopo_stats <- tar_read(bdtopo_bvinters_stats)
 # in_rht_stats <- tar_read(rht_bvinters_stats)
+# in_bvdep_inters <- tar_read(bvdep_inters)
 # id_cols <- c('UID_BV', 'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM_DEP')
 # 
-# 
+# #
 # in_dt_list <- list(ddtnets=in_ddtnets_stats,
 #                    carthage=in_carthage_stats,
 #                    bcae=in_bcae_stats,
 #                    bdtopo=in_bdtopo_stats,
 #                    rht=in_rht_stats)
-analyze_drainage_density <- function(in_dt_list, outdir) {
+summarize_drainage_density <- function(in_dt_list, in_bvdep_inters, outdir) {
   #in_dt_list <- c(as.list(environment()))
-
+  
   id_cols <- c('UID_BV', 'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM_DEP')
   
   
@@ -535,16 +650,16 @@ analyze_drainage_density <- function(in_dt_list, outdir) {
       !duplicated(UID_BV)
       , c('UID_BV', 'per_ce', 'per_ind', 'per_nce', 'per_int'), with=F],
       by='UID_BV')  %>%
+    merge(in_bvdep_inters[, .(UID_BV, POLY_AREA)], by="UID_BV") %>%
     setnames(c('length_bv_carthage', 'length_bv_bcae',
-               'length_bv_bdtopo', 'length_bv_rht'),
-             c('carthage', 'bcae', 'bdtopo', 'rht'))
-  
-  
+               'length_bv_bdtopo', 'length_bv_rht', 'POLY_AREA'),
+             c('carthage', 'bcae', 'bdtopo', 'rht', 'bv_area'))
+
   ddt_cats <- c('per_ce', 'per_ind', 'per_nce', 'per_int')
   
   nets_stats_melt <- melt(
     nets_stats_merged_bv,
-    id.vars = c(id_cols, 'length_bv_ddtnets', ddt_cats),
+    id.vars = c(id_cols, 'length_bv_ddtnets', 'bv_area', ddt_cats),
   ) %>%
     .[, variable := factor(variable,
                            levels=c('bdtopo', 'carthage', 'bcae', 'rht'))]
@@ -552,7 +667,8 @@ analyze_drainage_density <- function(in_dt_list, outdir) {
   
   nets_stats_melt_b8 <-nets_stats_melt[, list(
     length_ddtnets = sum(length_bv_ddtnets, na.rm=T),
-    length_others = sum(value, na.rm=T)
+    length_others = sum(value, na.rm=T),
+    b8_area = sum(bv_area)
   ), by=c('PFAF_ID08', 'INSEE_DEP', 'NOM_DEP', 'variable')]
   
   nets_stats_melt_dep <-nets_stats_melt[
@@ -597,21 +713,24 @@ analyze_drainage_density <- function(in_dt_list, outdir) {
 }
 
 #-------------------------- plot_drainage_density ---------------------------
-plot_drainage_density <- function(in_drainage_density_analysis) {
-  in_dtlist <- in_drainage_density_analysis
+#in_drainage_density_summary <- tar_read(drainage_density_summary)
+plot_drainage_density <- function(in_drainage_density_summary) {
+  in_dtlist <- in_drainage_density_summary
   
-  #Scartterplot of drainage density at the catchment level
+  #Scartterplot of drainage density at the catchment level, excluding those under 1 km2
   plot_dd_scatter_bv <- ggplot(
-    in_dtlist$nets_stats_melt,
+    in_dtlist$nets_stats_melt[bv_area>10,],
     aes(x=value,
         y=length_bv_ddtnets, color=variable
     )) +
+    #geom_text(aes(label=INSEE_DEP)) +
     geom_point(alpha=1/3) +
     #geom_smooth(method='rlm',color='white',alpha=0.5) +
     geom_smooth(method='rlm') +
     scale_y_log10() +
     scale_x_log10() +
-    theme_bw()
+    theme_bw() +
+    facet_wrap(~variable, scales='free')
   
   
   #Scartterplot of drainage density at the basin level 8
@@ -686,3 +805,25 @@ plot_drainage_density <- function(in_drainage_density_analysis) {
 }
 
 
+
+
+#-------------------------- analyze_drainage_density --------------------------
+in_drainage_density_summary <- tar_read(drainage_density_summary)
+in_env_bv_dt <- tar_read(env_bv_dt)
+
+analyze_drainage_density <- function(in_drainage_density_summary,
+                                     in_env_bv_dt) {
+  dt <- merge(in_drainage_density_summary$nets_stats_merged_bv,
+              in_env_bv_dt,
+              by='UID_BV')
+  
+  check <- dt[ddt_to_bdtopo_ddratio>100 & bv_area>10,]
+  
+  ggplot(dt[bv_area>10,], aes(x=per_int,
+                 y=ddt_to_bdtopo_ddratio)) +
+    geom_text(aes(label=INSEE_DEP)) +
+    scale_y_log10()
+  
+  
+  
+}

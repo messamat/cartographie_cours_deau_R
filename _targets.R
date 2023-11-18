@@ -28,6 +28,8 @@ list(
   ,
   
   #Establish csv file paths (to be reactive to file updates)
+  tar_target(bvdep_inters_path, file.path(resdir, 'BV_hybas0809_depsinters.csv')),
+  
   tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
   tar_target(bdtopo_bvinters_path, file.path(resdir, "bdtopo2015_fr_bvinters.csv"),format = 'file'), #BDTOPO
   tar_target(rht_bvinters_path, file.path(resdir, "rht_lbt93_bvinters.csv"),format = 'file'), #RHT
@@ -42,7 +44,9 @@ list(
   tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
   tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
   tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
-  tar_target(bnpe_timeseries_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_chroniques.csv')),
+  tar_target(bnpe_timeseries_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_chroniques.csv'), format = 'file'),
+  tar_target(bnpe_withdrpts_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_prelevements.csv'), format = 'file'),
+  tar_target(bnpe_ouvrages_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_ouvrages.csv'), format = 'file'),
   
   #Read in DDT metadata
   tar_target(metadata_sources, read_xlsx(path = ddt_metadata_path, sheet="Sources")),
@@ -57,6 +61,9 @@ list(
   tar_target(ddt_nets_colnas, fread(ddt_nets_colnas_path)),
   
   #"skip", "guess", "logical", "numeric", "date", "text" or "list"
+  
+  #Read in csv of units of analysis
+  tar_target(bvdep_inters, fread(bvdep_inters_path)),
   
   #Read in csvs of networks
   tar_target(bcae_bvinters, fread(bcae_bvinters_path)), #BCAE
@@ -75,6 +82,9 @@ list(
   tar_target(snelder_bvinters, fread(snelder_bvinters_path)),
   tar_target(bnpe_bvinters, fread(bnpe_bvinters_path)), #withdrawals
   tar_target(bnpe_timeseries, fread(bnpe_timeseries_path)),
+  tar_target(bnpe_withdrpts, fread(bnpe_withdrpts_path)),
+  tar_target(bnpe_ouvrages, fread(bnpe_ouvrages_path)),
+  
   
   #Read and merge gdb tables
   tar_target(
@@ -96,7 +106,7 @@ list(
                  new = paste(names(.)[-(names(.)=='UID_BV')],lyr,sep='_')
                )
            }) %>% 
-      Reduce(function(x, y) merge(x, y, by="UID_BV"), .)
+      Reduce(function(x, y) merge(x, y, by="UID_BV", all.x=T, all.y=T), .)
   )
   ,
   tar_target(
@@ -121,10 +131,22 @@ list(
   ),
   tar_target(
     withdrawals_formatted,
-    format_bnpe(bnpe_bvinters, bnpe_timeseries)
+    format_bnpe(bnpe_bvinters, bnpe_timeseries, bnpe_ouvrages)
   ),
   
-
+  tar_target(
+    env_bv_dt,
+    compile_all_env(in_bvdep_inters = bvdep_inters,
+                    in_envlist =   list(
+                      env_gdbtabs=env_gdbtabs
+                      , barriers_formatted=barriers_formatted
+                      , lithology_formatted=lithology_formatted
+                      , forest_formatted=forest_formatted
+                      , ires_formatted=ires_formatted
+                      , withdrawals_formatted=withdrawals_formatted
+                    ))
+  ),
+  
   tar_target(
     metadata_nets_formatted,
     format_metadata_nets(metadata_nets)
@@ -162,21 +184,22 @@ list(
   ),
   
   tar_target(
-    drainage_density_analysis,
-    analyze_drainage_density(
+    drainage_density_summary,
+    summarize_drainage_density(
       in_dt_list = list(
         ddtnets = ddtnets_bvinters_stats$bv_stats,
         carthage = carthage_bvinters_stats,
         bcae = bcae_bvinters_stats,
         bdtopo = bdtopo_bvinters_stats,
         rht = rht_bvinters_stats),
-      outdir = resdir
+      outdir = resdir,
+      in_bvdep_inters = bvdep_inters
     )
   ),
   
   tar_target(
     drainage_density_plots,
-    plot_drainage_density(in_drainage_density_analysis=drainage_density_analysis)
+    plot_drainage_density(in_drainage_density_summary=drainage_density_summary)
   )
   
   #------------------------------- Format statistics ---------------------------
