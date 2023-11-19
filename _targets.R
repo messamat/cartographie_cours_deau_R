@@ -204,17 +204,21 @@ list(
   ),
   
   tar_target(
-    drainage_density_plots,
-    plot_drainage_density(in_drainage_density_summary=drainage_density_summary)
+    env_dd_merged_bv,
+    merge_env_dd_bv(in_drainage_density_summary=drainage_density_summary,
+                 in_env_bv_dt=env_bv_dt)
   ),
   
   tar_target(
-    env_dd_merged,
-    merge_env_dd(in_drainage_density_summary=drainage_density_summary,
-                 in_env_bv_dt=env_bv_dt)
-  )
+    env_dd_merged_dep,
+    merge_env_dd_dep (in_drainage_density_summary=drainage_density_summary,
+                      in_env_bv_dt=env_bv_dt)
+  ),
   
-  #------------------------------- Format statistics ---------------------------
-  #amber_bvinters[, .N, by=c('LabelAtlas', 'UID_BV')]
+  tar_target(
+    envdd_dep_plots,
+    plot_envdd_dep(in_drainage_density_summary=drainage_density_summary,
+                   in_env_dd_merged_dep = env_dd_merged_dep)
+  )
   
 )

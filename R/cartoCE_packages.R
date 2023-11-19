@@ -1,7 +1,5 @@
 library(data.table)
-library(furrr)
-library(future)
-library(future.callr)
+library(ggcorrplot)
 library(ggplot2)
 library(MASS)
 library(quantreg)
@@ -10,7 +8,6 @@ library(rprojroot)
 library(sf)
 library(stringr)
 library(targets)
-library(terra)
 
 #Possible packages for visuals:
 #https://mjskay.github.io/ggdist/

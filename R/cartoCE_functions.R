@@ -207,9 +207,9 @@ format_bdtopo <- function(in_bdtopo_bvinters) {
 }
 
 #-------------------------- format_ddtnets_bvinters -----------------------------
-in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
-in_bdtopo_bvinters <- tar_read(bdtopo_bvinters)
-in_carthage_bvinters <- tar_read(carthage_bvinters)
+# in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
+# in_bdtopo_bvinters <- tar_read(bdtopo_bvinters)
+# in_carthage_bvinters <- tar_read(carthage_bvinters)
 
 format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
                                     in_bdtopo_bvinters,
@@ -698,7 +698,8 @@ compile_all_env <- function(in_bvdep_inters,
   )
 
   out_tab_dep_1 <- out_tab_bv[,
-    list(lapply(.SD, function(x) weighted.mean(x, bv_area_km2, na.rm=T))),
+    list(sapply(.SD, function(x) weighted.mean(x, bv_area_km2, na.rm=T)),
+         simplify=F),
   .SDcols = cols_to_wmean_by_area,
   by= 'INSEE_DEP'] %>%
     .[!is.na(INSEE_DEP),] %>%
@@ -708,7 +709,8 @@ compile_all_env <- function(in_bvdep_inters,
   cols_to_sum <-  grep('n_barriers', names(out_tab_bv), value=T)
 
   out_tab_dep_2 <- out_tab_bv[,
-                            list(lapply(.SD, function(x) sum(x,na.rm=T))),
+                            list(sapply(.SD, function(x) sum(x,na.rm=T)),
+                                 simplify=F),
                             .SDcols = cols_to_sum,
                             by= 'INSEE_DEP'] %>%
     .[!is.na(INSEE_DEP),] %>%
@@ -741,7 +743,7 @@ compile_all_env <- function(in_bvdep_inters,
 # id_cols <- c('UID_BV', 'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM_DEP')
 # 
 # #
-# in_dt_list <- list(carthage=in_carthage_stats,
+# in_othernets_statlist<- list(carthage=in_carthage_stats,
 #                    bcae=in_bcae_stats,
 #                    bdtopo=in_bdtopo_stats,
 #                    rht=in_rht_stats)
@@ -759,9 +761,13 @@ summarize_drainage_density <- function(in_ddtnets_stats,
   #and the ratio between the share of non-perennial segments classified as non-watercourse
   #to the share of non-perennial segments in the BV (to control for differences 
   #in non-perennial segment prevalence)
-  in_ddtnets_stats[, `:=`(
+  int_nce_stats_bv <-   in_ddtnets_stats[, `:=`(
+    int_length = .SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
     nce_int_length = .SD[type_stand=="Non cours d'eau" & 
                            regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
+    per_nce_determined_regime = .SD[regime_formatted != 'undetermined' & 
+                                      type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]/
+      .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)],
     per_nce_intratio = (
       .SD[type_stand=="Non cours d'eau" & regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
         .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]
@@ -775,9 +781,10 @@ summarize_drainage_density <- function(in_ddtnets_stats,
                           as.formula(paste(paste(id_cols, collapse='+'),
                                            '~type_stand')),
                           value.var='length_cat_bv', fun.aggregate=sum) %>%
-    merge(in_ddtnets_stats[!duplicated(UID_BV), 
+    merge(int_nce_stats_bv[!duplicated(UID_BV), 
                            .(UID_BV, total_length_bv, per_int,
-                             per_ce, per_ind, per_nce, nce_int_length,
+                             per_ce, per_ind, per_nce, 
+                             int_length, nce_int_length,per_nce_determined_regime, 
                              per_nce_intratio)], by='UID_BV') %>%
     setnames(c("Cours d'eau", "Indéterminé", "Inexistant", "Non cours d'eau"),
              c('length_bv_ce', 'length_bv_ind', 'length_bv_inx', 'length_bv_nce'))
@@ -824,23 +831,26 @@ summarize_drainage_density <- function(in_ddtnets_stats,
   
   #Compute statistics for departments ------------------------------------------
   #Compute IRES representativeness at the department level
-  int_nce_stats_dep <- in_ddtnets_stats[, list(
+  int_nce_stats_dep <-   in_ddtnets_stats[, list(
+    per_nce_determined_regime = .SD[regime_formatted != 'undetermined' & 
+                                  type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]/
+      .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)],
+    int_length = .SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
     nce_int_length = .SD[type_stand=="Non cours d'eau" & 
-                           regime_formatted=='intermittent', 
-                         sum(length_cat_bv, na.rm=T)],
+                           regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
     per_nce_intratio = (
       .SD[type_stand=="Non cours d'eau" & regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
         .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]
-      )/
+    )/
       (.SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
-         .SD[, sum(length_cat_bv, na.rm=T)]
-       )
-  ), by=INSEE_DEP]
+         .SD[, sum(length_cat_bv, na.rm=T)])
+  ), by='INSEE_DEP']
   
   #Compute general statistics
   nets_stats_melt_dep <-nets_stats_melt[
     ,
     list(
+      length_ddtnets_total = sum(total_length_bv_ddtnets, na.rm=T),
       length_ddtnets_ce = sum(length_bv_ce_ddtnets, na.rm=T),
       length_ddtnets_ind = sum(length_bv_ind_ddtnets, na.rm=T),
       length_others = sum(value, na.rm=T),
@@ -867,7 +877,8 @@ summarize_drainage_density <- function(in_ddtnets_stats,
       lengthratio_ddt_ceind_to_bdtopo_standardized=lengthratio_ddt_ceind_to_other_standardized,
       INSEE_DEP = INSEE_DEP
     )],
-    by=c('INSEE_DEP'))
+    by=c('INSEE_DEP')) %>%
+    merge(int_nce_stats_dep, by='INSEE_DEP')
   
   #Compute drainage density ratios at the bv level -----------------------------
   nets_stats_merged_bv[, `:=`(
@@ -896,131 +907,6 @@ summarize_drainage_density <- function(in_ddtnets_stats,
   ))
 }
 
-#-------------------------- plot_drainage_density ---------------------------
-#in_drainage_density_summary <- tar_read(drainage_density_summary)
-plot_drainage_density <- function(in_drainage_density_summary) {
-  bv_stats <- in_drainage_density_summary$nets_stats_merged_bv
-  dep_stats <- in_drainage_density_summary$nets_stats_melt_dep
-  
-  #Total length, variability in drainage density at the level of departments
-  total_length_fr <- dep_stats[, list(
-    total_length_fr = sum(length_others)/1000), 
-    by=variable] %>%
-    rbind(bv_stats[, list(
-      total_length_fr = sum(total_length_bv_ddtnets, na.rm=T)/1000,
-      variable = 'ddtnets_all')]) %>%
-    rbind(bv_stats[, list(
-      total_length_fr = (sum(length_bv_ce_ddtnets, na.rm=T) +
-        sum(length_bv_ind_ddtnets, na.rm=T))/1000,
-      variable = 'ddtnets_ceind')])
-  
-  # drainage_density_stats <- dep_stats[, list(
-  #   total_length_fr = sum(length_others)/1000), 
-  #   by=variable] %>%
-  #   rbind(bv_stats[, list(
-  #     total_length_fr = sum(total_length_bv_ddtnets, na.rm=T)/1000,
-  #     variable = 'ddtnets_all')]) %>%
-  #   rbind(bv_stats[, list(
-  #     total_length_fr = (sum(length_bv_ce_ddtnets, na.rm=T) +
-  #                          sum(length_bv_ind_ddtnets, na.rm=T))/1000,
-  #     variable = 'ddtnets_ceind')])
-  # 
-  
-  
-  
-  
-  
-  #Scartterplot of drainage density at the catchment level, excluding those under 1 km2
-  plot_dd_scatter_bv <- ggplot(
-    in_dtlist$nets_stats_melt[bv_area>10,],
-    aes(x=value,
-        y=(length_bv_ce_ddtnets+length_bv_ind_ddtnets), 
-        color=variable
-    )) +
-    #geom_text(aes(label=INSEE_DEP)) +
-    geom_point(alpha=1/3) +
-    #geom_smooth(method='rlm',color='white',alpha=0.5) +
-    geom_smooth(method='rlm') +
-    scale_y_log10() +
-    scale_x_log10() +
-    theme_bw() +
-    facet_wrap(~variable, scales='free')
-  
-  #Scartterplot of drainage density at the basin level 8
-  #check <- in_dtlist$nets_stats_melt_b8[length_ddtnets_ceind==0 & b8_area>10,]
-  
-  plot_dd_scatter_b8 <- ggplot(
-    in_dtlist$nets_stats_melt_b8[b8_area>10,],
-    aes(x=length_others,
-        y=length_ddtnets_ceind,
-        color=variable
-    )) +
-    #geom_point() +
-    geom_text(aes(label=INSEE_DEP)) +
-    geom_smooth(method='rlm') +
-    facet_wrap(~variable, scales = 'free_y') +
-    theme_bw() +
-    scale_y_log10() +
-    scale_x_log10()
-  
-  #Scartterplot of drainage density at department level (without Paris)
-  plot_dd_scatter_dep <- ggplot(
-    in_dtlist$nets_stats_melt_dep[INSEE_DEP != 75,],
-    aes(x=length_others,
-        y=(length_ddtnets_ce)+(length_ddtnets_ind),
-        color=variable
-    )) +
-    #geom_point() +
-    geom_text(aes(label=INSEE_DEP)) +
-    geom_smooth(method='rlm') +
-    facet_wrap(~variable, scales = 'free_y') +
-    theme_bw()+
-    scale_y_log10() +
-    scale_x_log10()
-  
-  #Bar chart of drainage density ratio at the department level
-  plot_ddratio_bars_dep <- ggplot(
-    in_dtlist$nets_stats_melt_dep,
-    aes(x=reorder(INSEE_DEP, lengthratio_ddt_ceind_to_bdtopo_standardized),
-        y=lengthratio_ddt_ceind_to_other,
-        fill=variable
-    )) +
-    geom_bar(stat='identity', alpha=0.5) +
-    geom_bar(aes(y=(per_ce/(per_ce+per_ind))*lengthratio_ddt_ceind_to_other), 
-             stat='identity') +
-    geom_hline(yintercept=1) +
-    scale_y_continuous(expand=c(0,0)) +
-    #geom_text(aes(label=INSEE_DEP)) +
-    coord_flip() +
-    facet_grid(~variable, scales = 'free') +
-    theme_bw() +
-    theme(axis.text.x = element_text(angle=90))
-  
-  #Distribution of drainage density ratios at the department level
-  #After standardization within reference network 
-  plot_ddratio_standardized_dep <- ggplot(
-    in_dtlist$nets_stats_melt_dep,
-    aes(x=reorder(INSEE_DEP, mean_lengthratio_ddt_ceind_to_other_standardized),
-        y=lengthratio_ddt_ceind_to_other_standardized,
-        color=variable
-    )) +
-    geom_point() +
-    geom_point(aes(y=mean_lengthratio_ddt_ceind_to_other_standardized),
-               color='black', shape='square',size=2) +
-    geom_smooth() +
-    scale_y_continuous(expand=c(0,0)) +
-    coord_flip() +
-    theme_bw()
-  
-  return(list(
-    plot_dd_scatter_bv,
-    plot_dd_scatter_b8,
-    plot_dd_scatter_dep,
-    plot_ddratio_bars_dep,
-    plot_ddratio_standardized_dep
-  ))
-}
-
 #-------------------------- merge env to drainage density at bv level ----------
 # in_drainage_density_summary <- tar_read(drainage_density_summary)
 # in_env_bv_dt <- tar_read(env_bv_dt)
@@ -1028,8 +914,8 @@ plot_drainage_density <- function(in_drainage_density_summary) {
 merge_env_dd_bv <- function(in_drainage_density_summary,
                          in_env_bv_dt) {
   dt <- merge(in_drainage_density_summary$nets_stats_merged_bv,
-              in_env_bv_dt,
-              by='UID_BV') 
+              in_env_bv_dt$bv,
+              by=c('UID_BV', 'INSEE_DEP')) 
   #Compute stats with CE and IND
   dt[, ddt_to_bdtopo_ddratio_ceind_depmean := weighted.mean(
       ddt_to_bdtopo_ddratio_ceind, 
@@ -1075,41 +961,21 @@ merge_env_dd_bv <- function(in_drainage_density_summary,
 
 merge_env_dd_dep <- function(in_drainage_density_summary,
                             in_env_bv_dt) {
-  dt <- merge(in_drainage_density_summary$nets_stats_merged_bv,
-              in_env_bv_dt,
-              by='UID_BV') 
-  #Compute stats with CE and IND
-  dt[, ddt_to_bdtopo_ddratio_ceind_depmean := weighted.mean(
-    ddt_to_bdtopo_ddratio_ceind, 
-    ((length_bv_ce_ddtnets+length_bv_ind_ddtnets)+bdtopo)/2,
-    na.rm=T),
-    by='INSEE_DEP'] %>%
-    .[, ddt_to_bdtopo_ddratiodev_ceind := 
-        ddt_to_bdtopo_ddratio_ceind-ddt_to_bdtopo_ddratio_ceind_depmean] %>%
-    .[, ddt_ceind_dd := (length_bv_ce_ddtnets+length_bv_ind_ddtnets)/(1000*bv_area)] 
-  
-  #Compute stats with ce only
-  dt[, ddt_to_bdtopo_ddratio_ce_depmean := weighted.mean(
-    ddt_to_bdtopo_ddratio_ce, 
-    ((length_bv_ce_ddtnets+length_bv_ind_ddtnets)+bdtopo)/2,
-    na.rm=T),
-    by='INSEE_DEP'] %>%
-    .[, ddt_to_bdtopo_ddratiodev_ce := 
-        ddt_to_bdtopo_ddratio_ce-ddt_to_bdtopo_ddratio_ce_depmean] %>%
-    .[, ddt_ce_dd := (length_bv_ce_ddtnets+length_bv_ind_ddtnets)/(1000*bv_area)] 
-  
+
+  dt <- merge(in_drainage_density_summary[['nets_stats_melt_dep']],
+              in_env_bv_dt[['dep']],
+              by='INSEE_DEP') 
+
   cols_to_divide_by_length <- grep('n_barriers',
                                    names(dt), value=T)
   dt[, (cols_to_divide_by_length) := sapply(
     .SD, 
     function(x) {
       fifelse(is.na(x), 0,
-              1000*x/(length_bv_ce_ddtnets+length_bv_ind_ddtnets))
+              1000*x/(length_ddtnets_ce+length_ddtnets_ind))
     }, simplify=F),
-    .SDcols = cols_to_divide_by_length]
-  
-  dt[, per_nce_dep := sum(length_bv_nce_ddtnets,na.rm=T)/
-       sum(total_length_bv_ddtnets), by=INSEE_DEP]
+    .SDcols = cols_to_divide_by_length,
+    by='INSEE_DEP']
   
   new_colnames <- gsub('n_barriers', 'bar_bk_ssu', cols_to_divide_by_length)
   setnames(dt, cols_to_divide_by_length, new_colnames)
@@ -1117,25 +983,237 @@ merge_env_dd_dep <- function(in_drainage_density_summary,
   return(dt)
 }
 
-#-------------------------- Plot drainage density deviations at the bv level -----------------
-#in_env_dd_merged <- tar_read(env_dd_merged)
-analyze_drainage_ratio_bv <- function(in_env_dd_merged) {
-  
-  #dt <- in_env_dd_merged
-  
-  ggplot(dt[ddt_to_bdtopo_ddratiodev_ce<2, 
-            list(mean_dev = mean(abs(ddt_to_bdtopo_ddratiodev_ce))), by=INSEE_DEP],
-         aes(x=factor(INSEE_DEP), y=mean_dev)) + 
-    geom_bar(stat = 'identity')
-  
-  dt[, mean_absddratiodev_ce := mean(abs(ddt_to_bdtopo_ddratiodev_ce)),
-     by=INSEE_DEP]
 
-  dt <- dt[bv_area>10 & bdtopo >500 & ddt_to_bdtopo_ddratiodev_ce < 2 &
-             total_length_bv_ddtnets>0 & mean_absddratiodev_ce>0.1,]
+#-------------------------- Summarize drainage density and deviations at the dep level ---------------------------
+# in_drainage_density_summary <- tar_read(drainage_density_summary)
+# in_env_dd_merged_dep <- tar_read(env_dd_merged_dep)
+
+plot_envdd_dep <- function(in_drainage_density_summary,
+                           in_env_dd_merged_dep) {
+  dep_stats <- in_drainage_density_summary$nets_stats_melt_dep
+  
+  #---------------------- compute general stats - to be integrated in report ----
+  #Total length, variability in drainage density at the level of departments
+  total_length_fr <- dep_stats[, list(
+    total_length_fr = sum(length_others)/1000), 
+    by=variable] %>%
+    rbind(dep_stats[!duplicated(INSEE_DEP), list(
+      total_length_fr = sum(length_ddtnets_total, na.rm=T)/1000,
+      variable = 'ddtnets_all')]) %>%
+    rbind(dep_stats[!duplicated(INSEE_DEP), list(
+      total_length_fr = (sum(length_ddtnets_ce, na.rm=T) +
+                           sum(length_ddtnets_ind, na.rm=T))/1000,
+      variable = 'ddtnets_ceind')])
+  
+  #Representativeness of intermittent rivers in declassified segments
+  nce_intratio_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                                 per_nce_determined_regime>0.5 &
+                                 per_nce>0.01,
+                               (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))/
+                                 (sum(int_length)/sum(length_ddtnets_total))]
+  int_per_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                            per_nce_determined_regime>0.5 &
+                            per_nce>0.01, sum(int_length)/sum(length_ddtnets_total)]
+  nce_int_length_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                                   per_nce_determined_regime>0.5 &
+                                   per_nce>0.01, sum(nce_int_length)/1000]
+  nce_length_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                               per_nce_determined_regime>0.5 &
+                               per_nce>0.01, sum(per_nce*length_ddtnets_total)/1000]
+  
+  #------------------------- Plots of drainage density and deviation -----------
+  #Scartterplot of drainage density at department level (without Paris)
+  p_dd_scatter_dep <- ggplot(
+    dep_stats[INSEE_DEP != 75,],
+    aes(x=length_others,
+        y=(length_ddtnets_ce)+(length_ddtnets_ind),
+        color=variable
+    )) +
+    #geom_point() +
+    geom_text(aes(label=INSEE_DEP)) +
+    geom_smooth(method='rlm') +
+    facet_wrap(~variable, scales = 'free_y') +
+    theme_bw()+
+    scale_y_log10() +
+    scale_x_log10()
+  
+  #Bar chart of drainage density ratio at the department level
+  p_ddratio_bars_dep <- ggplot(
+    dep_stats,
+    aes(x=reorder(INSEE_DEP, lengthratio_ddt_ceind_to_bdtopo_standardized),
+        y=lengthratio_ddt_ceind_to_other,
+        fill=variable
+    )) +
+    geom_bar(stat='identity', alpha=0.5) +
+    geom_bar(aes(y=(per_ce/(per_ce+per_ind))*lengthratio_ddt_ceind_to_other), 
+             stat='identity') +
+    geom_hline(yintercept=1) +
+    scale_y_continuous(expand=c(0,0)) +
+    #geom_text(aes(label=INSEE_DEP)) +
+    coord_flip() +
+    facet_grid(~variable, scales = 'free') +
+    theme_bw() +
+    theme(axis.text.x = element_text(angle=90))
+  
+  #Bar chart of intermittent-river representativeness
+  p_intratio_bars_dep <- ggplot(
+    dep_stats[!duplicated(INSEE_DEP) & 
+                per_nce_determined_regime>0.5 &
+                per_nce>0.01,],
+    aes(x=reorder(INSEE_DEP,per_nce_intratio),
+        y=per_nce_intratio,
+        fill=nce_int_length/1000
+    )) +
+    geom_bar(stat='identity') +
+    geom_hline(yintercept=1) +
+    scale_x_discrete(name='Department number') +
+    scale_y_continuous(
+      name='Representativeness of intermittent rivers in segments classified as non-watercourses', 
+      expand=c(0,0)) +
+    scale_fill_distiller(name=str_wrap('Length of intermittent rivers classified
+                                       as non-watercourses (km)', 30),
+                         palette='Spectral', trans = "sqrt",
+                         breaks=c(2, 100, 500, 1000, 2000, 6000))+
+    #geom_text(aes(label=INSEE_DEP)) +
+    coord_flip() +
+    theme_bw() +
+    theme(
+      panel.grid.minor = element_blank(),
+      legend.position=c(0.8,0.2),
+      legend.background = element_blank()
+    )
+  
+  #------------------------- Plots of drivers of drainage density deviation -----------
+  driver_cols <- c('agr_pc_sse', 'ari_ix_ssu', 'ari_ix_syr', 'awc_mm_sav', 
+                   'imp_pc_sse','ire_pc_sse', 'ppc_pk_sav', 'pst_pc_sse',
+                   'scr_pc_sse', 'vny_pc_sse', 'slo_dg_sav', 'bar_bk_ssu_TOTAL', 'irs_pc_sav',
+                   'vww_mk_syr_Souterrain_IRRIGATION',
+                   'vww_mk_syr_Souterrain_EAU_POTABLE',
+                   'vww_mk_syr_Surface_continental_IRRIGATION'
+                   # 'vww_mk_syr_Surface_continental_EAU_POTABLE'
+  )
+  stat_cols <- c('INSEE_DEP', 'lengthratio_ddt_ce_to_other',
+                 'lengthratio_ddt_ceind_to_other','per_ce', 'per_nce')
+  
+  plot_env_lengthratio <- function(in_refnet, in_dt) {
+    env_dd_melt <- melt(
+      in_dt[
+        variable==in_refnet,
+        c(driver_cols, stat_cols),
+        with=F],
+      id.vars=stat_cols)
+    
+    plot_env_lengthratio_ceind<- ggplot(
+      env_dd_melt, 
+      aes(x=value, y=lengthratio_ddt_ceind_to_other,
+          color=per_nce)) +
+      geom_point() +
+      geom_hline(yintercept=1, alpha=0.5) +
+      geom_smooth(method='gam') +
+      scale_color_distiller(palette='Spectral') +
+      facet_wrap(~variable, scales='free') +
+      theme_bw() +
+      theme(
+        panel.grid.minor = element_blank()
+      )
+    
+    return(plot_env_lengthratio_ceind)
+  }
+  
+  p_env_lengthratio_bdtopo <- plot_env_lengthratio(in_refnet='bdtopo',
+                                                   in_dt=in_env_dd_merged_dep)
+  p_env_lengthratio_carthage <- plot_env_lengthratio(in_refnet='carthage',
+                                                     in_dt=in_env_dd_merged_dep)
+  
+  # ggplot(env_dd_melt, aes(x=value, y=lengthratio_ddt_ce_to_other,
+  #                         color=per_nce)) +
+  #   geom_point() +
+  #   geom_hline(yintercept=1, alpha=0.5) +
+  #   geom_smooth(method='gam') +
+  #   scale_color_distiller(palette='Spectral') +
+  #   facet_wrap(~variable, scales='free') +
+  #   theme_bw()
+  
+  # ggplot(env_dd_melt[per_nce>0.01,],
+  #        aes(x=value, y=per_nce,
+  #            color=lengthratio_ddt_ce_to_other)) +
+  #   geom_point() +
+  #   geom_hline(yintercept=1, alpha=0.5) +
+  #   #geom_quantile() +
+  #   geom_smooth(method='gam') +
+  #   scale_color_distiller(palette='Spectral') +
+  #   facet_wrap(~variable, scales='free') +
+  #   theme_bw()
+  
+       
+  # #Distribution of drainage density ratios at the department level
+  # #After standardization within reference network 
+  # plot_ddratio_standardized_dep <- ggplot(
+  #   dep_stats,
+  #   aes(x=reorder(INSEE_DEP, mean_lengthratio_ddt_ceind_to_other_standardized),
+  #       y=lengthratio_ddt_ceind_to_other_standardized,
+  #       color=variable
+  #   )) +
+  #   geom_point() +
+  #   geom_point(aes(y=mean_lengthratio_ddt_ceind_to_other_standardized),
+  #              color='black', shape='square',size=2) +
+  #   geom_smooth() +
+  #   scale_y_continuous(expand=c(0,0)) +
+  #   coord_flip() +
+  #   theme_bw()
+  
+  return(list(
+    dd_scatter_dep = p_dd_scatter_dep,
+    ddratio_bars_dep =p_ddratio_bars_dep,
+    intratio_bars_dep =p_intratio_bars_dep,
+    env_lengthratio_bdtopo = p_env_lengthratio_bdtopo,
+    env_lengthratio_carthage = p_env_lengthratio_carthage
+  ))
+}
+
+#-------------------------- Plot drainage density and deviations at the bv level -----------------
+in_env_dd_merged_dep <- tar_read(env_dd_merged_bv)
+
+plot_envdd_dep <- function(in_env_dd_merged_bv) {
+  
+  dt <- in_env_dd_merged_dep 
+  
+  qplot(abs(dt$ddt_to_bdtopo_ddratiodev_ce)) + scale_x_log10()
+
+  
+  dt_sub <- dt[bv_area>10 & bdtopo >500 & total_length_bv_ddtnets>0,]
+  dt[, length(unique(INSEE_DEP))]
+  dt_sub[, length(unique(INSEE_DEP))]
+  
+  driver_cols <- c('agr_pc_sse', 'ari_ix_ssu', 'ari_ix_syr', 'awc_mm_sav', 
+                   'imp_pc_sse','ire_pc_sse', 'ppc_pk_sav', 'pst_pc_sse',
+                   'scr_pc_sse', 'vny_pc_sse', 'slo_dg_sav', 'bar_bk_ssu_TOTAL', 'irs_pc_sav',
+                   'vww_mk_syr_Souterrain_IRRIGATION',
+                   'vww_mk_syr_Souterrain_EAU_POTABLE',
+                   'vww_mk_syr_Surface_continental_IRRIGATION'
+                   # 'vww_mk_syr_Surface_continental_EAU_POTABLE'
+  )
+  stat_cols <- c('UID_BV','INSEE_DEP',
+                 'ddt_to_bdtopo_ddratio_ce',
+                 'ddt_to_bdtopo_ddratio_ceind',
+                 'per_ce_ddtnets', 'per_nce_ddtnets')
+  
+  env_dd_melt <- melt(
+    dt_sub[,
+      c(driver_cols, stat_cols),
+      with=F],
+    id.vars=stat_cols) %>%
+    .[, `:=`(cor=cor(ddt_to_bdtopo_ddratio_ce, value, method='spearman'),
+             n_bvs = .N)
+       , by=c("INSEE_DEP", "variable")]
+
+
+  
+  env_ddratio_cor[abs(cor)>0.5,]
+  
   
   #Percentage intermittent DDT
-  ggplot(dt, aes(x=per_int_ddtnets,
+  ggplot(dt_sub, aes(x=per_int_ddtnets,
                  y=ddt_to_bdtopo_ddratiodev_ceind)) +
     geom_text(aes(label=INSEE_DEP))  +
     geom_quantile(quantiles=c(0.1,0.5,0.9)) 
@@ -1243,6 +1321,4 @@ analyze_drainage_ratio_bv <- function(in_env_dd_merged) {
     geom_smooth(method='rlm') 
   
 }
-
-
 #-------------------------- analyze_drainage_density --------------------------
