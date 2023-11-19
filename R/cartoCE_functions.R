@@ -107,139 +107,11 @@ format_metadata_nets <- function(in_metadata_nets) {
   return( mdat_dt_uform)
 }
 
-#in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
-#-------------------------- format_ddtnets_bvinters -----------------------------
-#in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
-format_ddtnets_bvinters <- function(in_ddtnets_bvinters) {
-  # names(in_net_bvinters)
-  # summary(in_net_bvinters)
-  # in_net_bvinters[geom_Length < 0.01, .N]
-  # unique(stringr::str_to_lower(in_net_bvinters$regime))
-  # unique(stringr::str_to_lower(in_net_bvinters$regime2))
-  
-  
-  #Format regime
-  perrenial_termlist <- c(
-    "permanent", "perm. natura", "plein", "pemanent", "continu", "p")      
-  intermittent_termlist <- c(
-    "intermittent", "intermitent", "pointill?","temporaire", "ecou_tres_te", 
-    "ecoul_tempor", "intermitant", "pointille", "intermitten","intermittant", 
-    "intermittent non suffisant", "pointillã¯â¿â½?ã¯â¿â", "pointillã¯â¿â½?ã¯â¿â",
-    "pointillï¿½?ï¿½?ï¿½?", "pointillãƒâ¯ã‚â¿ã‚â½?ãƒâ¯ã‚â¿ã‚",
-    "continuitãƒâ¯ã‚â¿ã‚â½?ãƒâ¯ã‚â¿", "pointillã¯â¿â½", "i")
-  
-  in_ddtnets_bvinters[, `:=`(regime = stringr::str_to_lower(regime),
-                             regime2 = stringr::str_to_lower(regime2)
-  )]
-  
-  in_ddtnets_bvinters[
-    , regime_formatted := fcase(
-      regime %in% perrenial_termlist, 'perennial', 
-      regime %in% intermittent_termlist, 'intermittent',
-      default='undetermined')]
-  in_ddtnets_bvinters[!is.na(regime2) &  (regime2 %in% perrenial_termlist),
-                      regime_formatted := 'perennial']
-  in_ddtnets_bvinters[!is.na(regime2) &  (regime2 %in% intermittent_termlist),
-                      regime_formatted := 'intermittent']
-  
-  #Remove lines from a departmental layer outside of that department
-  in_ddtnets_bvinters[, orig_dep := as.integer(str_extract(orig_layer, "[0-9]{1,2}"))]
-  
-  in_ddtnets_bvinters <- in_ddtnets_bvinters[(orig_dep == INSEE_DEP) |
-                                               (INSEE_DEP %in% c(92, 93 ,94)),]
-  in_ddtnets_bvinters[type_stand == "Hors département", .N] 
-  #Only 2983 actually labeled as "Hors département", even though almost 100k are actually outside
-  
-  #Summarize length of lines by attributes
-  bv_stats <- in_ddtnets_bvinters[
-    , list(n_lines = .N,
-           length_cat_bv = sum(geom_Length)
-    ),
-    by=c('UID_BV', 'type_stand', 'regime_formatted', 
-         'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM')
-  ] %>%
-    .[, total_length_bv := sum(length_cat_bv), by=c('UID_BV')] %>% #Total line length in bv
-    .[, length_per_cat_bv := length_cat_bv/total_length_bv] %>% #Proportion of the BV's total line length that this row represents
-    .[, per_ce := .SD[type_stand == "Cours d'eau", 
-                      sum(length_per_cat_bv)], by=UID_BV]  %>% 
-    .[, per_ind:= .SD[type_stand == "Indéterminé", 
-                      sum(length_per_cat_bv)], by=UID_BV]  %>% 
-    .[, per_nce:= .SD[type_stand == "Non cours d'eau", 
-                      sum(length_per_cat_bv)], by=UID_BV]  %>% 
-    .[, per_int := .SD[regime_formatted == "intermittent", 
-                       sum(length_per_cat_bv)], by=UID_BV] %>%
-    setnames('NOM', 'NOM_DEP')
-  
-  dep_stats <-  bv_stats[
-    , list(length_cat_dep = sum(length_cat_bv))
-    , by=c('INSEE_DEP', 'NOM_DEP', 'type_stand', 'regime_formatted')] %>%
-    .[, total_length_dep := sum(length_cat_dep), by=c('INSEE_DEP', 'NOM_DEP')] %>%
-    .[, length_per_cat_dep := length_cat_dep/total_length_dep] %>% #Proportion of the BV's total line length that this row represents
-    .[, per_ce := .SD[type_stand == "Cours d'eau", 
-                      sum(length_per_cat_dep)], by=INSEE_DEP]  %>% 
-    .[, per_ind:= .SD[type_stand == "Indéterminé", 
-                      sum(length_per_cat_dep)], by=INSEE_DEP]  %>% 
-    .[, per_nce:= .SD[type_stand == "Non cours d'eau", 
-                      sum(length_per_cat_dep)], by=INSEE_DEP]  %>% 
-    .[, per_int := .SD[regime_formatted == "intermittent", 
-                       sum(length_per_cat_dep)], by=INSEE_DEP]
-  
-  return(list(
-    bv_stats=bv_stats,
-    dep_stats=dep_stats)
-  )
-}
-
-#-------------------------- plot_ddtnet_dep -----------------------------------
-plot_ddtnet_dep <- function(in_ddtnet_dep_stats) {
-  plot_ddtnet_dep_cetype <- ggplot(in_ddtnet_dep_stats, 
-                                   aes(x=reorder(NOM, per_ce), 
-                                       y=length_per_cat_dep, 
-                                       fill=type_stand)) +
-    geom_bar(stat='identity', 
-             position = position_stack(reverse = TRUE)) +
-    scale_x_discrete('Department') +
-    scale_y_continuous('Percentage of total length of segments in Department',
-                       expand=c(0,0), labels = scales::percent) +
-    scale_fill_discrete(
-      stringr::str_wrap('Standardized category of watercourse according to DDT', 20)
-    ) +
-    coord_flip() + 
-    theme_bw()
-  
-  plot_ddtnet_dep_regime <- ggplot(in_ddtnet_dep_stats, 
-                                   aes(x=reorder(NOM, per_int), 
-                                       y=length_per_cat_dep, 
-                                       fill=regime_formatted)) +
-    geom_bar(stat='identity', 
-             position = position_stack(reverse = TRUE)) +
-    scale_x_discrete('Department') +
-    scale_y_continuous('Percentage of total length of segments in Department',
-                       expand=c(0,0), labels = scales::percent) +
-    scale_fill_discrete(
-      stringr::str_wrap('Standardized category of regime', 20)
-    ) +
-    coord_flip() + 
-    theme_bw()
-  
-  plot_ddtnet_dep_regime_vs_cetype <- ggplot(
-    in_ddtnet_dep_stats[per_ce < 1,],
-    aes(x=per_int, y=per_ce)) +
-    geom_point() +
-    geom_quantile()
-  
-  return(list(
-    plot_ddtnet_dep_cetype,
-    plot_ddtnet_dep_regime,
-    plot_ddtnet_dep_regime_vs_cetype
-  ))
-}
-
 #-------------------------- format_carthage ------------------------------------
 #in_carthage_bvinters <- tar_read(carthage_bvinters)
 format_carthage <- function(in_carthage_bvinters) {
-  names(in_carthage_bvinters)
-  head(in_carthage_bvinters)
+  #names(in_carthage_bvinters)
+  #head(in_carthage_bvinters)
   #BD Carthage
   # ETAT: Intermittent, Permanent, Fictif (traverse un corps d'eau ou soutterrain)
   #       Inconnu, A sec, En attente de mise a jour
@@ -332,6 +204,161 @@ format_bdtopo <- function(in_bdtopo_bvinters) {
     setnames('NOM_1', 'NOM_DEP')
   
   return(bdtopo_bv_stats)
+}
+
+#-------------------------- format_ddtnets_bvinters -----------------------------
+in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
+in_bdtopo_bvinters <- tar_read(bdtopo_bvinters)
+in_carthage_bvinters <- tar_read(carthage_bvinters)
+
+format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
+                                    in_bdtopo_bvinters,
+                                    in_carthage_bvinters) {
+  #  names(in_ddtnets_bvinters)
+  # summary(in_ddtnets_bvinters)
+  # in_ddtnets_bvinters[geom_Length < 0.01, .N]
+  # unique(stringr::str_to_lower(in_ddtnets_bvinters$regime))
+  # unique(stringr::str_to_lower(in_ddtnets_bvinterss$regime2))
+
+  #----- Format regime
+  #Get data from bd topo
+  in_ddtnets_bvinters <- merge(
+    in_ddtnets_bvinters,
+    in_bdtopo_bvinters[!duplicated(ID), .(ID, REGIME)],
+    by.x='id', by.y='ID', all.x=T) %>%
+    merge(in_carthage_bvinters[!duplicated(CODE_HYDRO) & CODE_HYDRO != '',
+                               .(CODE_HYDRO, ETAT)],
+          by.x='code_hydro', by.y='CODE_HYDRO', all.x=T) %>%
+    setnames(c('REGIME','ETAT'), c('regime_bdtopo', 'regime_carthage')) 
+  
+  perrenial_termlist <- c(
+    "permanent", "perm. natura", "plein", "pemanent", "continu", "p")      
+  intermittent_termlist <- c(
+    "intermittent", "intermitent", "pointill?","temporaire", "ecou_tres_te", 
+    "ecoul_tempor", "intermitant", "pointille", "intermitten","intermittant", 
+    "intermittent non suffisant", "pointillã¯â¿â½?ã¯â¿â", "pointillã¯â¿â½?ã¯â¿â",
+    "pointillï¿½?ï¿½?ï¿½?", "pointillãƒâ¯ã‚â¿ã‚â½?ãƒâ¯ã‚â¿ã‚",
+    "continuitãƒâ¯ã‚â¿ã‚â½?ãƒâ¯ã‚â¿", "pointillã¯â¿â½", "i")
+  
+  in_ddtnets_bvinters[, `:=`(regime = stringr::str_to_lower(regime),
+                             regime2 = stringr::str_to_lower(regime2)
+  )]
+  
+  in_ddtnets_bvinters[, regime_formatted := 
+                        fcase(regime_carthage=='Permanent', 'perennial',
+                              regime_carthage=='Intermittent', 'intermittent',
+                              default='undetermined')]
+  
+  in_ddtnets_bvinters[!is.na(regime_bdtopo) &  
+                        regime_bdtopo == 'Permanent',
+                      regime_formatted := 'perennial']
+  in_ddtnets_bvinters[!is.na(regime_bdtopo) &  
+                        regime_bdtopo =='Intermittent',
+                      regime_formatted := 'intermittent']
+  in_ddtnets_bvinters[!is.na(regime) &  regime %in% perrenial_termlist,
+                      regime_formatted := 'perennial']
+  in_ddtnets_bvinters[!is.na(regime) &  regime %in% intermittent_termlist,
+                      regime_formatted := 'intermittent']
+  in_ddtnets_bvinters[!is.na(regime2) &  (regime2 %in% perrenial_termlist),
+                      regime_formatted := 'perennial']
+  in_ddtnets_bvinters[!is.na(regime2) &  (regime2 %in% intermittent_termlist),
+                      regime_formatted := 'intermittent']
+  
+  #Remove lines from a departmental layer outside of that department
+  in_ddtnets_bvinters[, orig_dep := as.integer(str_extract(orig_layer, "[0-9]{1,2}"))]
+  
+  in_ddtnets_bvinters <- in_ddtnets_bvinters[(orig_dep == INSEE_DEP) |
+                                               (INSEE_DEP %in% c(92, 93 ,94)),]
+  
+  #For the section of the watercourse that is actually within the department
+  #Re-assign "Hors département" to "Indéterminé"
+  in_ddtnets_bvinters[type_stand == "Hors département", 
+                      type_stand := 'Indéterminé'] 
+  #Only 88 actually labeled as "Hors département"
+  
+  #Summarize length of lines by attributes
+  bv_stats <- in_ddtnets_bvinters[
+    , list(n_lines = .N,
+           length_cat_bv = sum(geom_Length)
+    ),
+    by=c('UID_BV', 'type_stand', 'regime_formatted', 
+         'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM')
+  ] %>%
+    .[, total_length_bv := sum(length_cat_bv), by=c('UID_BV')] %>% #Total line length in bv
+    .[, length_per_cat_bv := length_cat_bv/total_length_bv] %>% #Proportion of the BV's total line length that this row represents
+    .[, per_ce := .SD[type_stand == "Cours d'eau", 
+                      sum(length_per_cat_bv)], by=UID_BV]  %>% 
+    .[, per_ind:= .SD[type_stand == "Indéterminé", 
+                      sum(length_per_cat_bv)], by=UID_BV]  %>% 
+    .[, per_nce:= .SD[type_stand %in% c("Non cours d'eau", "Inexistant"), 
+                      sum(length_per_cat_bv)], by=UID_BV]  %>% 
+    .[, per_int := .SD[regime_formatted == "intermittent", 
+                       sum(length_per_cat_bv)], by=UID_BV] %>%
+    setnames('NOM', 'NOM_DEP')
+  
+  dep_stats <-  bv_stats[
+    , list(length_cat_dep = sum(length_cat_bv))
+    , by=c('INSEE_DEP', 'NOM_DEP', 'type_stand', 'regime_formatted')] %>%
+    .[, total_length_dep := sum(length_cat_dep), by=c('INSEE_DEP', 'NOM_DEP')] %>%
+    .[, length_per_cat_dep := length_cat_dep/total_length_dep] %>% #Proportion of the BV's total line length that this row represents
+    .[, per_ce := .SD[type_stand == "Cours d'eau", 
+                      sum(length_per_cat_dep)], by=INSEE_DEP]  %>% 
+    .[, per_ind:= .SD[type_stand == "Indéterminé", 
+                      sum(length_per_cat_dep)], by=INSEE_DEP]  %>% 
+    .[, per_nce:= .SD[type_stand %in% c("Non cours d'eau", "Inexistant"), 
+                      sum(length_per_cat_dep)], by=INSEE_DEP]  %>% 
+    .[, per_int := .SD[regime_formatted == "intermittent", 
+                       sum(length_per_cat_dep)], by=INSEE_DEP]
+  
+  return(list(
+    bv_stats=bv_stats,
+    dep_stats=dep_stats)
+  )
+}
+
+#-------------------------- plot_ddtnet_dep -----------------------------------
+plot_ddtnet_dep <- function(in_ddtnet_dep_stats) {
+  plot_ddtnet_dep_cetype <- ggplot(in_ddtnet_dep_stats, 
+                                   aes(x=reorder(NOM, per_ce), 
+                                       y=length_per_cat_dep, 
+                                       fill=type_stand)) +
+    geom_bar(stat='identity', 
+             position = position_stack(reverse = TRUE)) +
+    scale_x_discrete('Department') +
+    scale_y_continuous('Percentage of total length of segments in Department',
+                       expand=c(0,0), labels = scales::percent) +
+    scale_fill_discrete(
+      stringr::str_wrap('Standardized category of watercourse according to DDT', 20)
+    ) +
+    coord_flip() + 
+    theme_bw()
+  
+  plot_ddtnet_dep_regime <- ggplot(in_ddtnet_dep_stats, 
+                                   aes(x=reorder(NOM, per_int), 
+                                       y=length_per_cat_dep, 
+                                       fill=regime_formatted)) +
+    geom_bar(stat='identity', 
+             position = position_stack(reverse = TRUE)) +
+    scale_x_discrete('Department') +
+    scale_y_continuous('Percentage of total length of segments in Department',
+                       expand=c(0,0), labels = scales::percent) +
+    scale_fill_discrete(
+      stringr::str_wrap('Standardized category of regime', 20)
+    ) +
+    coord_flip() + 
+    theme_bw()
+  
+  plot_ddtnet_dep_regime_vs_cetype <- ggplot(
+    in_ddtnet_dep_stats[per_ce < 1,],
+    aes(x=per_int, y=per_ce)) +
+    geom_point() +
+    geom_quantile()
+  
+  return(list(
+    plot_ddtnet_dep_cetype,
+    plot_ddtnet_dep_regime,
+    plot_ddtnet_dep_regime_vs_cetype
+  ))
 }
 
 #-------------------------- format amber ---------------------------------------
@@ -427,7 +454,7 @@ format_irrig <- function(in_comirrig_bvinters) {
   #commune and the percentage of potentially irrigated crops from that commune 
   #in that BV
   irrig_bv <- in_comirrig_bvinters[, list(
-    irrig_area =sum(irrig_area_com_all*bvcom_percirrig/100)
+    ire_pc_sse=sum(irrig_area_com_all*bvcom_percirrig/100)
   ), by=UID_BV
   ]
   
@@ -543,7 +570,7 @@ compile_all_env <- function(in_bvdep_inters,
       , slo_dg_sav = MEAN_slo_dg_sav
       , ari_ix_ssu = MEAN_ari_ix_ssu/10000
       , ari_ix_syr = MEAN_ari_ix_syr/10000
-      , ppc_pk_sav = SUM_ppc_in_sav/AREA_ppc_in_sav
+      , ppc_pk_sav = SUM_ppc_in_sav/(AREA_ppc_in_sav*10^6)
       , awc_mm_sav = MEAN_awc_mm_sav0_5 + MEAN_awc_mm_sav5_15 +
         MEAN_awc_mm_sav15_30 + MEAN_awc_mm_sav30_60 +
         MEAN_awc_mm_sav60_100 + MEAN_awc_mm_sav100_200
@@ -600,9 +627,18 @@ compile_all_env <- function(in_bvdep_inters,
 
 
   out_tab_bv <- Reduce(function(x, y) merge(x, y, by="UID_BV", all.x=T, all.y=T),
-                    in_envlist)
+                    in_envlist) 
+ 
+  cols_to_divide_by_area <- grep('(vww_mk_syr)|(ire_pc_sse)',
+                                 names(out_tab_bv), value=T)
+  out_tab_bv[, (cols_to_divide_by_area) := sapply(.SD, 
+                                                  function(x) {
+                                                    fifelse(is.na(x), 0,
+                                                            x/bv_area_km2)
+                                                    }, simplify=F),
+             .SDcols = cols_to_divide_by_area]
   
-  return(out_tab_bv)
+  return(out_tab_bv[!is.na(UID_BV),])
 }
 
 ###################### ANALYZE DRAINAGE DENSITY ################################
@@ -617,27 +653,53 @@ compile_all_env <- function(in_bvdep_inters,
 # id_cols <- c('UID_BV', 'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM_DEP')
 # 
 # #
-# in_dt_list <- list(ddtnets=in_ddtnets_stats,
-#                    carthage=in_carthage_stats,
+# in_dt_list <- list(carthage=in_carthage_stats,
 #                    bcae=in_bcae_stats,
 #                    bdtopo=in_bdtopo_stats,
 #                    rht=in_rht_stats)
-summarize_drainage_density <- function(in_dt_list, in_bvdep_inters, outdir) {
+summarize_drainage_density <- function(in_ddtnets_stats, 
+                                       in_othernets_statlist, 
+                                       in_bvdep_inters, 
+                                       outdir) {
   #in_dt_list <- c(as.list(environment()))
   
   id_cols <- c('UID_BV', 'PFAF_ID08', 'PFAF_ID09', 'INSEE_DEP', 'NOM_DEP')
   
   
-  #Only keep cours d'eau and
-  in_dt_list[['ddtnets']] <- in_dt_list[['ddtnets']][
-    type_stand %in% c("Cours d'eau", "Indéterminé"),
-  ]
+  #Compute the length of non-perennial segments classified as non-watercourse
+  #and the ratio between the share of non-perennial segments classified as non-watercourse
+  #to the share of non-perennial segments in the BV (to control for differences 
+  #in non-perennial segment prevalence)
+  in_ddtnets_stats[, `:=`(
+    nce_int_length = .SD[type_stand=="Non cours d'eau" & 
+                           regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
+    per_nce_intratio = (.SD[type_stand=="Non cours d'eau" & 
+                              regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
+                          .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)])/
+      (.SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
+         .SD[, sum(length_cat_bv, na.rm=T)])
+  ), by='UID_BV']
+  
+  
+  ddtnets_stats <-  dcast(in_ddtnets_stats, 
+                          as.formula(paste(paste(id_cols, collapse='+'),
+                                           '~type_stand')),
+                          value.var='length_cat_bv', fun.aggregate=sum) %>%
+    merge(in_ddtnets_stats[!duplicated(UID_BV), 
+                           .(UID_BV, total_length_bv, per_int,
+                             per_ce, per_ind, per_nce, nce_int_length,
+                             per_nce_intratio)], by='UID_BV') %>%
+    setnames(c("Cours d'eau", "Indéterminé", "Inexistant", "Non cours d'eau"),
+             c('length_bv_ce', 'length_bv_ind', 'length_bv_inx', 'length_bv_nce'))
+    
   
   #Get rid of sub-categories - compute total drainage length
-  dt_list_nocats_bv <- lapply(in_dt_list, function(dt) {
+  dt_list_nocats_bv <- lapply(in_othernets_statlist, function(dt) {
     dt[, list(length_bv = sum(length_cat_bv)),
        by=c(id_cols)]
   })
+  
+  dt_list_nocats_bv[['ddtnets']] <- ddtnets_stats
   
   nets_stats_merged_bv <- mergeDTlist(
     dt_list = dt_list_nocats_bv,
@@ -646,59 +708,74 @@ summarize_drainage_density <- function(in_dt_list, in_bvdep_inters, outdir) {
     set_suffix = TRUE
   ) %>%
     .[!(INSEE_DEP %in% c(92, 93, 94)),] %>%   #Remove departments from ile de france included with Paris
-    merge(in_dt_list[['ddtnets']][
-      !duplicated(UID_BV)
-      , c('UID_BV', 'per_ce', 'per_ind', 'per_nce', 'per_int'), with=F],
-      by='UID_BV')  %>%
     merge(in_bvdep_inters[, .(UID_BV, POLY_AREA)], by="UID_BV") %>%
     setnames(c('length_bv_carthage', 'length_bv_bcae',
                'length_bv_bdtopo', 'length_bv_rht', 'POLY_AREA'),
              c('carthage', 'bcae', 'bdtopo', 'rht', 'bv_area'))
 
-  ddt_cats <- c('per_ce', 'per_ind', 'per_nce', 'per_int')
-  
   nets_stats_melt <- melt(
     nets_stats_merged_bv,
-    id.vars = c(id_cols, 'length_bv_ddtnets', 'bv_area', ddt_cats),
+    measure.vars = c('carthage', 'bcae', 'bdtopo', 'rht')
+    # id.vars = names(nets_stats_merged_bv)[
+    #   !names(nets_stats_merged_bv) %in% c('carthage', 'bcae', 'bdtopo', 'rht')],
   ) %>%
     .[, variable := factor(variable,
                            levels=c('bdtopo', 'carthage', 'bcae', 'rht'))]
   
   
   nets_stats_melt_b8 <-nets_stats_melt[, list(
-    length_ddtnets = sum(length_bv_ddtnets, na.rm=T),
+    length_ddtnets_ce = sum(length_bv_ce_ddtnets, na.rm=T),
+    length_ddtnets_ind = sum(length_bv_ind_ddtnets, na.rm=T),
     length_others = sum(value, na.rm=T),
     b8_area = sum(bv_area)
-  ), by=c('PFAF_ID08', 'INSEE_DEP', 'NOM_DEP', 'variable')]
+  ), by=c('PFAF_ID08', 'INSEE_DEP', 'NOM_DEP', 'variable')] %>%
+    .[, length_ddtnets_ceind := length_ddtnets_ce + length_ddtnets_ind]
   
   nets_stats_melt_dep <-nets_stats_melt[
     ,
     list(
-      length_ddtnets = sum(length_bv_ddtnets, na.rm=T),
+      length_ddtnets_ce = sum(length_bv_ce_ddtnets, na.rm=T),
+      length_ddtnets_ind = sum(length_bv_ind_ddtnets, na.rm=T),
       length_others = sum(value, na.rm=T),
-      per_ce = sum(length_bv_ddtnets*per_ce)/sum(length_bv_ddtnets, na.rm=T),
-      per_ind = sum(length_bv_ddtnets*per_ind)/sum(length_bv_ddtnets, na.rm=T),
-      per_nce = sum(length_bv_ddtnets*per_ind)/sum(length_bv_ddtnets, na.rm=T)
+      per_ce = sum(length_bv_ce_ddtnets, na.rm=T)/sum(total_length_bv_ddtnets, na.rm=T),
+      per_ind = sum(length_bv_ind_ddtnets, na.rm=T)/sum(total_length_bv_ddtnets, na.rm=T),
+      per_nce = sum(length_bv_nce_ddtnets, na.rm=T)/sum(total_length_bv_ddtnets, na.rm=T)
     ), by=c('INSEE_DEP', 'NOM_DEP', 'variable')] %>%
-    .[, lengthratio_ddt_to_other := length_ddtnets/length_others,] %>%
-    .[, lengthratio_ddt_to_other_standardized :=
-        (lengthratio_ddt_to_other-mean(lengthratio_ddt_to_other))
+    .[, lengthratio_ddt_ce_to_other := length_ddtnets_ce/length_others,] %>%
+    .[, lengthratio_ddt_ceind_to_other := (length_ddtnets_ce + length_ddtnets_ind)/length_others,] %>%
+    .[, lengthratio_ddt_ce_to_other_standardized :=
+        (lengthratio_ddt_ce_to_other-mean(lengthratio_ddt_ce_to_other))
       , by=c('variable')] %>%
-    .[, mean_lengthratio_ddt_to_other_standardized :=
-        mean(lengthratio_ddt_to_other_standardized)
+    .[, lengthratio_ddt_ceind_to_other_standardized :=
+        (lengthratio_ddt_ceind_to_other-mean(lengthratio_ddt_ceind_to_other))
+      , by=c('variable')] %>%
+    .[, mean_lengthratio_ddt_ce_to_other_standardized :=
+        mean(lengthratio_ddt_ce_to_other_standardized)
+      , by=c('INSEE_DEP', 'NOM_DEP')] %>%
+    .[, mean_lengthratio_ddt_ceind_to_other_standardized :=
+        mean(lengthratio_ddt_ceind_to_other_standardized)
       , by=c('INSEE_DEP', 'NOM_DEP')] %>%
     merge(.[variable=='bdtopo', list(
-      lengthratio_ddt_to_bdtopo_standardized=lengthratio_ddt_to_other_standardized,
+      lengthratio_ddt_ce_to_bdtopo_standardized=lengthratio_ddt_ce_to_other_standardized,
+      lengthratio_ddt_ceind_to_bdtopo_standardized=lengthratio_ddt_ceind_to_other_standardized,
       INSEE_DEP = INSEE_DEP
     )],
     by=c('INSEE_DEP'))
   
   
   nets_stats_merged_bv[, `:=`(
-    ddt_to_carthage_ddratio =  length_bv_ddtnets/carthage,
-    ddt_to_bcae_ddratio =  length_bv_ddtnets/bcae,
-    ddt_to_bdtopo_ddratio =  length_bv_ddtnets/bdtopo,
-    ddt_to_rht_ddratio =  length_bv_ddtnets/rht
+    ddt_to_carthage_ddratio_ce =  length_bv_ce_ddtnets/carthage,
+    ddt_to_bcae_ddratio_ce =  length_bv_ce_ddtnets/bcae,
+    ddt_to_bdtopo_ddratio_ce =  length_bv_ce_ddtnets/bdtopo,
+    ddt_to_rht_ddratio_ce =  length_bv_ce_ddtnets/rht,
+    ddt_to_carthage_ddratio_ceind =  (length_bv_ce_ddtnets + 
+                                        length_bv_ind_ddtnets)/carthage,
+    ddt_to_bcae_ddratio_ceind =  (length_bv_ce_ddtnets + 
+                                    length_bv_ind_ddtnets)/bcae,
+    ddt_to_bdtopo_ddratio_ceind =  (length_bv_ce_ddtnets + 
+                                      length_bv_ind_ddtnets)/bdtopo,
+    ddt_to_rht_ddratio_ceind =  (length_bv_ce_ddtnets + 
+                                   length_bv_ind_ddtnets)/rht
   )]
   
   fwrite(nets_stats_merged_bv,
@@ -721,7 +798,8 @@ plot_drainage_density <- function(in_drainage_density_summary) {
   plot_dd_scatter_bv <- ggplot(
     in_dtlist$nets_stats_melt[bv_area>10,],
     aes(x=value,
-        y=length_bv_ddtnets, color=variable
+        y=(length_bv_ce_ddtnets+length_bv_ind_ddtnets), 
+        color=variable
     )) +
     #geom_text(aes(label=INSEE_DEP)) +
     geom_point(alpha=1/3) +
@@ -734,24 +812,27 @@ plot_drainage_density <- function(in_drainage_density_summary) {
   
   
   #Scartterplot of drainage density at the basin level 8
+  #check <- in_dtlist$nets_stats_melt_b8[length_ddtnets_ceind==0 & b8_area>10,]
+  
   plot_dd_scatter_b8 <- ggplot(
-    in_dtlist$nets_stats_melt_b8,
-    aes(x=length_ddtnets,
-        y=length_others, color=variable
+    in_dtlist$nets_stats_melt_b8[b8_area>10,],
+    aes(x=length_others,
+        y=length_ddtnets_ceind,
+        color=variable
     )) +
     #geom_point() +
     geom_text(aes(label=INSEE_DEP)) +
     geom_smooth(method='rlm') +
     facet_wrap(~variable, scales = 'free_y') +
     theme_bw() +
-    scale_y_sqrt() +
-    scale_x_sqrt()
+    scale_y_log10() +
+    scale_x_log10()
   
   #Scartterplot of drainage density at department level (without Paris)
   plot_dd_scatter_dep <- ggplot(
     in_dtlist$nets_stats_melt_dep[INSEE_DEP != 75,],
     aes(x=length_others,
-        y=length_ddtnets,
+        y=(length_ddtnets_ce)+(length_ddtnets_ind),
         color=variable
     )) +
     #geom_point() +
@@ -765,12 +846,13 @@ plot_drainage_density <- function(in_drainage_density_summary) {
   #Bar chart of drainage density ratio at the department level
   plot_ddratio_bars_dep <- ggplot(
     in_dtlist$nets_stats_melt_dep,
-    aes(x=reorder(INSEE_DEP, lengthratio_ddt_to_bdtopo_standardized),
-        y=lengthratio_ddt_to_other,
+    aes(x=reorder(INSEE_DEP, lengthratio_ddt_ceind_to_bdtopo_standardized),
+        y=lengthratio_ddt_ceind_to_other,
         fill=variable
     )) +
     geom_bar(stat='identity', alpha=0.5) +
-    geom_bar(aes(y=per_ce*lengthratio_ddt_to_other), stat='identity') +
+    geom_bar(aes(y=(per_ce/(per_ce+per_ind))*lengthratio_ddt_ceind_to_other), 
+             stat='identity') +
     geom_hline(yintercept=1) +
     scale_y_continuous(expand=c(0,0)) +
     #geom_text(aes(label=INSEE_DEP)) +
@@ -783,12 +865,12 @@ plot_drainage_density <- function(in_drainage_density_summary) {
   #After standardization within reference network 
   plot_ddratio_standardized_dep <- ggplot(
     in_dtlist$nets_stats_melt_dep,
-    aes(x=factor(INSEE_DEP, mean_lengthratio_ddt_to_other_standardized),
-        y=lengthratio_ddt_to_other_standardized,
+    aes(x=reorder(INSEE_DEP, mean_lengthratio_ddt_ceind_to_other_standardized),
+        y=lengthratio_ddt_ceind_to_other_standardized,
         color=variable
     )) +
     geom_point() +
-    geom_point(aes(y=mean_lengthratio_ddt_to_other_standardized),
+    geom_point(aes(y=mean_lengthratio_ddt_ceind_to_other_standardized),
                color='black', shape='square',size=2) +
     geom_smooth() +
     scale_y_continuous(expand=c(0,0)) +
@@ -804,26 +886,132 @@ plot_drainage_density <- function(in_drainage_density_summary) {
   ))
 }
 
+#-------------------------- merge env to drainage density ----------------------
+# in_drainage_density_summary <- tar_read(drainage_density_summary)
+# in_env_bv_dt <- tar_read(env_bv_dt)
+
+merge_env_dd <- function(in_drainage_density_summary,
+                         in_env_bv_dt) {
+  dt <- merge(in_drainage_density_summary$nets_stats_merged_bv,
+              in_env_bv_dt,
+              by='UID_BV') %>%
+    .[, ddt_to_bdtopo_ddratio_ceind_depmean := weighted.mean(
+      ddt_to_bdtopo_ddratio_ceind, 
+      ((length_bv_ce_ddtnets+length_bv_ind_ddtnets)+bdtopo)/2),
+      by='INSEE_DEP'] %>%
+    .[, ddt_to_bdtopo_ddratiodev := 
+        ddt_to_bdtopo_ddratio_ceind-ddt_to_bdtopo_ddratio_ceind_depmean] %>%
+    .[, ddt_ceind_dd := (length_bv_ce_ddtnets+length_bv_ind_ddtnets)/(1000*bv_area)] 
+  
+  cols_to_divide_by_length <- grep('n_barriers',
+                                 names(dt), value=T)
+  dt[, (cols_to_divide_by_length) := sapply(
+    .SD, 
+    function(x) {
+      fifelse(is.na(x), 0,
+              x/(1000*length_bv_ce_ddtnets+length_bv_ind_ddtnets))
+    }, simplify=F),
+    .SDcols = cols_to_divide_by_length]
+  
+  new_colnames <- gsub('n_barriers', 'bar_bk_ssu', cols_to_divide_by_length)
+  setnames(dt, cols_to_divide_by_length, new_colnames)
+  
+  return(dt)
+}
+  
 
 
 
 #-------------------------- analyze_drainage_density --------------------------
-in_drainage_density_summary <- tar_read(drainage_density_summary)
-in_env_bv_dt <- tar_read(env_bv_dt)
+# in_drainage_density_summary <- tar_read(drainage_density_summary)
+# in_env_bv_dt <- tar_read(env_bv_dt)
 
-analyze_drainage_density <- function(in_drainage_density_summary,
-                                     in_env_bv_dt) {
-  dt <- merge(in_drainage_density_summary$nets_stats_merged_bv,
-              in_env_bv_dt,
-              by='UID_BV')
-  
+analyze_drainage_ratio_bv <- function(in_dt) {
+
   check <- dt[ddt_to_bdtopo_ddratio>100 & bv_area>10,]
   
-  ggplot(dt[bv_area>10,], aes(x=per_int,
-                 y=ddt_to_bdtopo_ddratio)) +
-    geom_text(aes(label=INSEE_DEP)) +
-    scale_y_log10()
+  names(dt)
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=per_int,
+                 y=ddt_to_bdtopo_ddratiodev)) +
+    geom_text(aes(label=INSEE_DEP))  +
+    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
+    scale_y_continuous(limits=c(-1,2.5))
   
   
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=ari_ix_ssu,
+                              y=ddt_to_bdtopo_ddratiodev)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=ppc_pk_sav,
+                                            y=ddt_to_bdtopo_ddratiodev)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
+    scale_x_sqrt() +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=pst_pc_sse,
+                                            y=ddt_to_bdtopo_ddratiodev)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9))  +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=scr_pc_sse,
+                                            y=ddt_to_bdtopo_ddratiodev)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9))   +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=agr_pc_sse,
+                                            y=ddt_to_bdtopo_ddratiodev)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
+    geom_smooth()  +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=imp_pc_sse,
+                                            y=ddt_to_bdtopo_ddratiodev)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
+    geom_smooth()  +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=n_barriers_TOTAL,
+                                            y=ddt_to_bdtopo_ddratio)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9))  +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=vww_mk_syr_Surface_continental_IRRIGATION,
+                                            y=ddt_to_bdtopo_ddratio)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
+    geom_smooth(method='rlm') +
+    scale_x_log10() +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=ire_pc_sse,
+                                            y=ddt_to_bdtopo_ddratio)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9))  +
+    geom_smooth(method='rlm') +
+    scale_x_log10() +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=irs_pc_sav,
+                                            y=ddt_to_bdtopo_ddratio)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
+    geom_smooth(method='rlm') +
+    scale_y_continuous(limits=c(-1,2.5))
+  
+  ggplot(dt[bv_area>10 & bdtopo >500,], aes(x=irs_pc_sav,
+                                            y=ddt_dd)) +
+    geom_point(aes(label=INSEE_DEP)) +
+    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
+    geom_smooth(method='rlm') 
   
 }

@@ -109,6 +109,7 @@ list(
       Reduce(function(x, y) merge(x, y, by="UID_BV", all.x=T, all.y=T), .)
   )
   ,
+  #------------------------------- Format environmental data -------------------
   tar_target(
     barriers_formatted,
     format_amber(amber_bvinters)
@@ -144,9 +145,11 @@ list(
                       , forest_formatted=forest_formatted
                       , ires_formatted=ires_formatted
                       , withdrawals_formatted=withdrawals_formatted
+                      , irrig_formatted=irrig_formatted
                     ))
   ),
   
+  #------------------------------- Format networks data ------------------------
   tar_target(
     metadata_nets_formatted,
     format_metadata_nets(metadata_nets)
@@ -154,7 +157,9 @@ list(
   
   tar_target(
     ddtnets_bvinters_stats,
-    format_ddtnets_bvinters(in_ddtnets_bvinters = ddtnets_bvinters)
+    format_ddtnets_bvinters(in_ddtnets_bvinters = ddtnets_bvinters,
+                            in_bdtopo_bvinters = bdtopo_bvinters,
+                            in_carthage_bvinters = carthage_bvinters)
   ),
   
   tar_target(
@@ -183,11 +188,12 @@ list(
     format_rht(in_rht_bvinters = rht_bvinters) 
   ),
   
+  #------------------------------- analyze data --------------------------------
   tar_target(
     drainage_density_summary,
     summarize_drainage_density(
-      in_dt_list = list(
-        ddtnets = ddtnets_bvinters_stats$bv_stats,
+      in_ddtnets_stats = ddtnets_bvinters_stats$bv_stats,
+      in_othernets_statlist = list(
         carthage = carthage_bvinters_stats,
         bcae = bcae_bvinters_stats,
         bdtopo = bdtopo_bvinters_stats,
@@ -200,6 +206,12 @@ list(
   tar_target(
     drainage_density_plots,
     plot_drainage_density(in_drainage_density_summary=drainage_density_summary)
+  ),
+  
+  tar_target(
+    env_dd_merged,
+    merge_env_dd(in_drainage_density_summary=drainage_density_summary,
+                 in_env_bv_dt=env_bv_dt)
   )
   
   #------------------------------- Format statistics ---------------------------
