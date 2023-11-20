@@ -987,9 +987,11 @@ merge_env_dd_dep <- function(in_drainage_density_summary,
 #-------------------------- Summarize drainage density and deviations at the dep level ---------------------------
 # in_drainage_density_summary <- tar_read(drainage_density_summary)
 # in_env_dd_merged_dep <- tar_read(env_dd_merged_dep)
+#in_bvdep_inters <- tar_read(bvdep_inters)
 
 plot_envdd_dep <- function(in_drainage_density_summary,
-                           in_env_dd_merged_dep) {
+                           in_env_dd_merged_dep,
+                           in_bvdep_inters) {
   dep_stats <- in_drainage_density_summary$nets_stats_melt_dep
   
   #---------------------- compute general stats - to be integrated in report ----
@@ -1173,8 +1175,10 @@ plot_envdd_dep <- function(in_drainage_density_summary,
 
 #-------------------------- Plot drainage density and deviations at the bv level -----------------
 in_env_dd_merged_dep <- tar_read(env_dd_merged_bv)
+in_varnames <- tar_read(varnames)
 
-plot_envdd_dep <- function(in_env_dd_merged_bv) {
+plot_envdd_bv <- function(in_env_dd_merged_bv,
+                           in_varnames) {
   
   dt <- in_env_dd_merged_dep 
   
@@ -1203,122 +1207,143 @@ plot_envdd_dep <- function(in_env_dd_merged_bv) {
       c(driver_cols, stat_cols),
       with=F],
     id.vars=stat_cols) %>%
-    .[, `:=`(cor=cor(ddt_to_bdtopo_ddratio_ce, value, method='spearman'),
-             n_bvs = .N)
-       , by=c("INSEE_DEP", "variable")]
+    merge(in_varnames,
+          by='variable') %>%
+    merge(in_bvdep_inters[!duplicated(INSEE_DEP),
+                          .(INSEE_DEP, NOM)], 
+          by='INSEE_DEP')
+  
+  
+  env_dd_cor_dep <- env_dd_melt[, list(
+    cor=cor(ddt_to_bdtopo_ddratio_ce, value, method='spearman'),
+    n_bvs = .N)
+    , by=c("NOM", "description")] %>%
+    .[n_bvs>10,] 
 
-
+  env_dd_cor_dep_mat <- dcast(env_dd_cor_dep, NOM~description,
+                              value.var='cor')[, -c('NOM')] %>%
+    as.matrix(.) %>%
+    t()
+  colnames(env_dd_cor_dep_mat) <- unique(env_dd_cor_dep$NOM)
   
-  env_ddratio_cor[abs(cor)>0.5,]
+  # Pairwise correlation between samples (columns)
+  cols.cor <- cor(env_dd_cor_dep_mat, use = "pairwise.complete.obs", method = "pearson")
+  # Pairwise correlation between rows (genes)
+  rows.cor <- cor(t(env_dd_cor_dep_mat), use = "pairwise.complete.obs", method = "pearson")
   
-  
-  #Percentage intermittent DDT
-  ggplot(dt_sub, aes(x=per_int_ddtnets,
-                 y=ddt_to_bdtopo_ddratiodev_ceind)) +
-    geom_text(aes(label=INSEE_DEP))  +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) 
-  
-  ggplot(dt, aes(x=per_int_ddtnets,
-                 y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_text(aes(label=INSEE_DEP))  +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) 
-  
-  
-  ggplot(dt, aes(x=ari_ix_ssu,
-                 y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9))
-  
-  ggplot(dt, aes(x=ppc_pk_sav, y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
-    scale_x_sqrt() +
-    scale_y_continuous(limits=c(-1,2.5))
-  
-  ggplot(dt, aes(x=pst_pc_sse,
-                 y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9))  +
-    scale_y_continuous(limits=c(-1,2.5))
-  
-  ggplot(dt, aes(x=scr_pc_sse,
-                 y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9))   +
-    scale_y_continuous(limits=c(-1,2.5))
-  
-  ggplot(dt, aes(x=agr_pc_sse,
-                 y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
-    geom_smooth() 
+  ## Row- and column-wise clustering using correlation 
+  hclust.col <- hclust(as.dist(1-cols.cor)) 
+  hclust.row <- hclust(as.dist(1-rows.cor))
   
   
-  ggplot(dt, aes(x=imp_pc_sse,
-                 y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
-    geom_smooth() 
-  
-  ggplot(dt, 
-         aes(x=bar_bk_ssu_TOTAL,
-             y=ddt_to_bdtopo_ddratio_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    #geom_quantile(quantiles=c(0.1,0.5,0.9))  +
-    geom_smooth() +
-    scale_y_continuous(limits=c(-1,2.5)) +
-    scale_x_log10()
+  # Plot the heatmap
+  bv_heatmap <- heatmap.2(env_dd_cor_dep_mat, 
+            col = colorpanel(100,"#053061", "#f7f7f7", "#b2182b"), 
+            trace = "none", density.info = "none",
+            Colv = as.dendrogram(hclust.col),
+            Rowv = as.dendrogram(hclust.row),
+            lmat = rbind(c(0,3),c(2,1),c(0,4)),
+            lwid = c(0.5,4),
+            lhei = c(1,8,1.6),
+            margins=c(6,12)
+  )
   
   
-  ggplot(dt, 
-         aes(x=vww_mk_syr_Surface_continental_IRRIGATION,
-             y=ddt_to_bdtopo_ddratio_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
-    geom_smooth(method='rlm') +
-    scale_x_log10()
+  env_dd_cor_o05 <- env_dd_cor_dep[abs(cor) > 0.5,] %>%
+    merge(env_dd_melt, ., by=c('NOM', 'description'))
   
-  ggplot(dt, 
-         aes(x=vww_mk_syr_Surface_continental_IRRIGATION,
-             y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
-    geom_smooth(method='rlm') +
-    scale_x_sqrt()
+  unique(env_dd_cor_o05$variable)
   
-  ggplot(dt, aes(x=ire_pc_sse,
-                 y=ddt_to_bdtopo_ddratio_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9))  +
-    geom_smooth(method='rlm') +
-    scale_x_log10() 
+  p_bv_imp <- ggplot(env_dd_cor_o05[variable=='imp_pc_sse',],
+                     aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam',
+                formula = y ~ s(x, bs = "cs", fx = TRUE, k =4)) +
+    facet_wrap(~NOM, scales='free')
   
-  ggplot(dt, aes(x=ire_pc_sse,
-                 y=ddt_to_bdtopo_ddratiodev_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9))  +
-    geom_smooth(method='rlm') +
-    scale_x_log10() 
+  p_bv_ire <- ggplot(env_dd_cor_o05[variable=='ire_pc_sse',],
+                     aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
   
-  ggplot(dt, aes(x=irs_pc_sav,
-                 y=ddt_to_bdtopo_ddratio_ce)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
-    geom_smooth(method='rlm') +
-    scale_y_continuous(limits=c(-1,2.5))
+  p_bv_ariyr <- ggplot(env_dd_cor_o05[variable=='ari_ix_syr',],
+                     aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
   
-  ggplot(dt, aes(x=irs_pc_sav,
-                 y=ddt_ce_dd)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
-    geom_smooth(method='rlm') 
+  p_bv_arisu <- ggplot(env_dd_cor_o05[variable=='ari_ix_ssu',],
+                       aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
   
-  ggplot(dt[bv_area>10 & bdtopo >500 & per_nce_dep > 0,],
-         aes(x=irs_pc_sav,
-             y=per_nce_ddtnets)) +
-    geom_point(aes(label=INSEE_DEP)) +
-    geom_quantile(quantiles=c(0.1,0.5,0.9)) +
-    geom_smooth(method='rlm') 
+  p_bv_scr <- ggplot(env_dd_cor_o05[variable=='scr_pc_sse',],
+                       aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
+  
+  p_bv_pst <- ggplot(env_dd_cor_o05[variable=='pst_pc_sse',],
+                     aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
+ 
+  p_bv_ppc <- ggplot(env_dd_cor_o05[variable=='ppc_pk_sav',],
+                     aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
+  
+  
+  p_bv_irs <- ggplot(env_dd_cor_o05[variable=='irs_pc_sav',],
+                     aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
+  
+  p_bv_bar <- ggplot(env_dd_cor_o05[variable=='bar_bk_ssu_TOTAL',],
+                     aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
+  
+  
+  p_bv_vny <- ggplot(env_dd_cor_o05[variable=='vny_pc_sse',],
+         aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
+  
+  p_bv_vww_surface_irrig <- ggplot(
+    env_dd_cor_o05[variable=='vww_mk_syr_Surface_continental_IRRIGATION',],
+    aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
+  
+  p_bv_vww_surface_irrig <- ggplot(
+    env_dd_cor_o05[variable=='vww_mk_syr_Souterrain_IRRIGATION',],
+    aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
+  ) +
+    geom_point() +
+    geom_smooth(method='gam') +
+    facet_wrap(~NOM+round(cor,2), scales='free')
+  
+ 
   
 }
 #-------------------------- analyze_drainage_density --------------------------

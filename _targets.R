@@ -29,6 +29,7 @@ list(
   
   #Establish csv file paths (to be reactive to file updates)
   tar_target(bvdep_inters_path, file.path(resdir, 'BV_hybas0809_depsinters.csv')),
+  tar_target(varnames_path, file.path(datdir, 'variable_names_metadata.csv')),
   
   tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
   tar_target(bdtopo_bvinters_path, file.path(resdir, "bdtopo2015_fr_bvinters.csv"),format = 'file'), #BDTOPO
@@ -64,6 +65,9 @@ list(
   
   #Read in csv of units of analysis
   tar_target(bvdep_inters, fread(bvdep_inters_path)),
+  
+  #Read in variable names for displa
+  tar_target(varnames, fread(varnames_path)),
   
   #Read in csvs of networks
   tar_target(bcae_bvinters, fread(bcae_bvinters_path)), #BCAE
