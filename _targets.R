@@ -28,8 +28,8 @@ list(
   ,
   
   #Establish csv file paths (to be reactive to file updates)
-  tar_target(bvdep_inters_path, file.path(resdir, 'BV_hybas0809_depsinters.csv')),
-  tar_target(varnames_path, file.path(datdir, 'variable_names_metadata.csv')),
+  tar_target(bvdep_inters_path, file.path(resdir, 'BV_hybas0809_depsinters.csv'), format='file'),
+  tar_target(varnames_path, file.path(datdir, 'variable_names_metadata.csv'), format='file'),
   
   tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
   tar_target(bdtopo_bvinters_path, file.path(resdir, "bdtopo2015_fr_bvinters.csv"),format = 'file'), #BDTOPO
@@ -223,6 +223,29 @@ list(
     envdd_dep_plots,
     plot_envdd_dep(in_drainage_density_summary=drainage_density_summary,
                    in_env_dd_merged_dep = env_dd_merged_dep)
+  ),
+  
+  tar_target(
+    env_dd_merged_bv_tab,
+    fwrite(env_dd_merged_bv,
+         file.path(resdir, 'env_dd_merged_bv.csv')),
+    format = 'file'
+  ),
+  
+  tar_target(
+    env_dd_merged_dep_tab,
+    fwrite(env_dd_merged_dep,
+           file.path(resdir, 'env_dd_merged_dep.csv')),
+    format = 'file'
+  ),
+  
+  tar_target(
+    envdd_analysis,
+    corclus_envdd_bv(in_env_dd_merged_bv=env_dd_merged_bv,
+                     in_varnames=varnames,
+                     in_bvdep_inters=bvdep_inters)
   )
+  
+    
   
 )
