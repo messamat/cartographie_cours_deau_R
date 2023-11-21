@@ -26,9 +26,21 @@ list(
              format='file'
   ) 
   ,
+  #Path to actual river network
+  tar_target(ddtnets_path, file.path(resdir, 'analysis_outputs.gdb', 'carto_loi_eau_fr')),
   
-  #Establish csv file paths (to be reactive to file updates)
-  tar_target(bvdep_inters_path, file.path(resdir, 'BV_hybas0809_depsinters.csv'), format='file'),
+  #Path to departments
+  tar_target(deps_shp_path, file.path(datdir, 'données_auxiliaires', 'admin_express',
+                                  'ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16',
+                                  'ADMIN-EXPRESS', '1_DONNEES_LIVRAISON_2023-10-16',
+                                  'ADE_3-2_SHP_LAMB93_FXX', 'DEPARTEMENT.shp'),
+             format='file'
+  ),
+  
+  #Establish file paths (to be reactive to file updates)
+  tar_target(bvdep_inters_gdb_path, file.path(resdir, 'preprocessing_ancillary_data.gdb', 'BV_hybas0809_depsinters')),
+  tar_target(bvdep_inters_csv_path, file.path(resdir, 'BV_hybas0809_depsinters.csv')),
+  
   tar_target(varnames_path, file.path(datdir, 'variable_names_metadata.csv'), format='file'),
   
   tar_target(bcae_bvinters_path, file.path(resdir, "bcae_fr_bvinters.csv"),format = 'file'), #BCAE
@@ -63,8 +75,8 @@ list(
   
   #"skip", "guess", "logical", "numeric", "date", "text" or "list"
   
-  #Read in csv of units of analysis
-  tar_target(bvdep_inters, fread(bvdep_inters_path)),
+  #Read in units of analysis csv
+  tar_target(bvdep_inters_tab, fread(bvdep_inters_csv_path)),
   
   #Read in variable names for displa
   tar_target(varnames, fread(varnames_path)),
@@ -121,7 +133,7 @@ list(
   tar_target(
     forest_formatted,
     format_bdforet(bdforet_bvinters)
-    ),
+  ),
   tar_target(
     irrig_formatted,
     format_irrig(comirrig_bvinters)
@@ -141,7 +153,7 @@ list(
   
   tar_target(
     env_bv_dt,
-    compile_all_env(in_bvdep_inters = bvdep_inters,
+    compile_all_env(in_bvdep_inters = bvdep_inters_tab,
                     in_envlist =   list(
                       env_gdbtabs=env_gdbtabs
                       , barriers_formatted=barriers_formatted
@@ -203,14 +215,14 @@ list(
         bdtopo = bdtopo_bvinters_stats,
         rht = rht_bvinters_stats),
       outdir = resdir,
-      in_bvdep_inters = bvdep_inters
+      in_bvdep_inters = bvdep_inters_tab
     )
   ),
   
   tar_target(
     env_dd_merged_bv,
     merge_env_dd_bv(in_drainage_density_summary=drainage_density_summary,
-                 in_env_bv_dt=env_bv_dt)
+                    in_env_bv_dt=env_bv_dt)
   ),
   
   tar_target(
@@ -228,7 +240,7 @@ list(
   tar_target(
     env_dd_merged_bv_tab,
     fwrite(env_dd_merged_bv,
-         file.path(resdir, 'env_dd_merged_bv.csv')),
+           file.path(resdir, 'env_dd_merged_bv.csv')),
     format = 'file'
   ),
   
@@ -240,12 +252,19 @@ list(
   ),
   
   tar_target(
-    envdd_analysis,
+    envdd_multivar_analysis,
     corclus_envdd_bv(in_env_dd_merged_bv=env_dd_merged_bv,
                      in_varnames=varnames,
-                     in_bvdep_inters=bvdep_inters)
+                     in_bvdep_inters=bvdep_inters_tab)
   )
-  
-    
-  
+  # ,
+  # 
+  # tar_target(
+  #   envdd_plot_correlations,
+  #    plotmap_envdd_cors(iin_envdd_multivar_analysis=envdd_multivar_analysis,
+  #in_env_dd_merged_bv=env_dd_merged_bv,
+  # in_bvdep_inters_gdb_path= bvdep_inters_gdb_path,
+  # in_ddtnets_path = ddtnets_path,
+  # in_deps_path = deps_shp_path)
+  # )
 )

@@ -614,7 +614,7 @@ format_bnpe <- function(in_bnpe_bvinters,
 }
 
 #-------------------------- compile all environmental variables in one table ----
-# tar_load(bvdep_inters)
+# tar_load(bvdep_inters_tab)
 # tar_load(env_gdbtabs)
 # tar_load(barriers_formatted)
 # tar_load(lithology_formatted)
@@ -623,7 +623,7 @@ format_bnpe <- function(in_bnpe_bvinters,
 # tar_load(withdrawals_formatted)
 # tar_load(irrig_formatted)
 # 
-# in_bvdep_inters <- tar_read(bvdep_inters)
+# in_bvdep_inters <- tar_read(bvdep_inters_tab)
 # in_envlist <- list(
 #   env_gdbtabs=env_gdbtabs
 #   , barriers_formatted=barriers_formatted
@@ -1216,7 +1216,7 @@ plot_envdd_dep <- function(in_drainage_density_summary,
   ))
 }
 
-#-------------------------- Analyze env-dd for bvs across departments --------
+#-------------------------- Multivariate analysis env-dd for bvs across departments --------
 #in_env_dd_merged_bv <- tar_read(env_dd_merged_bv)
 # in_varnames <- tar_read(varnames)
 # in_bvdep_inters <- tar_read(bvdep_inters)
@@ -1289,7 +1289,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     cor= .SD[!is.na(value), 
              cor(ddt_to_bdtopo_ddratio_ceind, value, method='spearman')],
     n_bvs = .SD[!is.na(value), .N])
-    , by=c("NOM", "description")] %>%
+    , by=c("INSEE_DEP", "NOM", "description")] %>%
     .[n_bvs>10,] 
   
   excluded_deps <- env_dd_melt[!(NOM %in% env_dd_dep_cor$NOM), unique(NOM)]
@@ -1299,10 +1299,10 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   # - 0 IRS in some departments
   # - 0 water withdrawals
   
-  env_dd_dep_cormat <- dcast(env_dd_dep_cor, NOM~description,
+  env_dd_dep_cormat <- dcast(env_dd_dep_cor, NOM+INSEE_DEP~description,
                              value.var='cor')
   mat_names <-  env_dd_dep_cormat$NOM
-  env_dd_dep_cormat <- as.matrix(env_dd_dep_cormat[, -c('NOM')])
+  env_dd_dep_cormat <- as.matrix(env_dd_dep_cormat[, -c('NOM', 'INSEE_DEP')])
   row.names(env_dd_dep_cormat) <- mat_names
   
   #Cluster  ---------------------------------------------------------------------
@@ -1328,12 +1328,12 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Plot cophenetic correlation
   p_cophcor_avg <- ggplot(dist_cophcor_dt_avg, 
-         aes(x=`Gower's distance`, y=`Cophenetic dissimilarity`)) +
+                          aes(x=`Gower's distance`, y=`Cophenetic dissimilarity`)) +
     geom_point() +
     geom_abline() +
     annotate('text', x = 0.5, y=0.1,
              label=paste('Cophenetic correlation =', 
-                               round(cophcor_avg, 2))) +
+                         round(cophcor_avg, 2))) +
     coord_fixed(expand=F, 
                 ylim=c(0, max(dist_cophcor_dt_avg$`Cophenetic dissimilarity`)+0.05)) +
     theme_classic()
@@ -1346,7 +1346,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Plot cophenetic correlation
   p_cophcor_ward <- ggplot(dist_cophcor_dt_ward, 
-                          aes(x=`Gower's distance`, y=`Cophenetic dissimilarity`)) +
+                           aes(x=`Gower's distance`, y=`Cophenetic dissimilarity`)) +
     geom_point() +
     geom_abline() +
     annotate('text', x = 0.5, y=0.1,
@@ -1358,19 +1358,19 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Graph scree plot
   scree_dt_avg <- data.table(height=env_dd_dep_hclust_avg$height,
-                         groups=length(env_dd_dep_hclust_avg$height):1)
-
+                             groups=length(env_dd_dep_hclust_avg$height):1)
+  
   p_scree_avg <- ggplot(scree_dt_avg,
-                    aes(x=groups, y=height)) +
+                        aes(x=groups, y=height)) +
     geom_point() +
     geom_line() + 
     theme_classic()
   
   scree_dt_ward <- data.table(height=env_dd_dep_hclust_ward$height,
-                             groups=length(env_dd_dep_hclust_ward$height):1)
+                              groups=length(env_dd_dep_hclust_ward$height):1)
   
   p_scree_ward <- ggplot(scree_dt_ward,
-                        aes(x=groups, y=height)) +
+                         aes(x=groups, y=height)) +
     geom_point() +
     geom_line() + 
     theme_classic()
@@ -1384,15 +1384,15 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Make table of gauge classes and good looking dendogram
   env_dd_dendo_avg_5cl <-prettydend(hclus_out = env_dd_dep_hclust_avg, 
-                                kclass=5, colors=classcol,
-                                classnames= NULL)
+                                    kclass=5, colors=classcol,
+                                    classnames= NULL)
   env_dd_dendo_avg_8cl <-prettydend(hclus_out = env_dd_dep_hclust_avg, 
-                                kclass=8, colors=classcol,
-                                classnames= NULL)
+                                    kclass=8, colors=classcol,
+                                    classnames= NULL)
   p_dendo_avg_5cl <- env_dd_dendo_avg_5cl[[2]]
   p_dendo_avg_8cl <- env_dd_dendo_avg_8cl[[2]]
   
-
+  
   env_dd_dep_cor_avg_cl5 <- merge(env_dd_dep_cor, env_dd_dendo_avg_5cl[[1]],
                                   by.x='NOM', by.y='ID')
   env_dd_dep_cor_avg_cl8 <- merge(env_dd_dep_cor, env_dd_dendo_avg_8cl[[1]],
@@ -1418,19 +1418,19 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Make table of gauge classes and good looking dendogram
   env_dd_dendo_ward_5cl <-prettydend(hclus_out = env_dd_dep_hclust_ward, 
-                                  kclass=5, colors=classcol,
-                                  classnames= NULL)
+                                     kclass=5, colors=classcol,
+                                     classnames= NULL)
   env_dd_dendo_ward_8cl <-prettydend(hclus_out = env_dd_dep_hclust_ward, 
-                                kclass=8, colors=classcol,
-                                classnames= NULL)
+                                     kclass=8, colors=classcol,
+                                     classnames= NULL)
   p_dendo_ward_5cl <- env_dd_dendo_ward_5cl[[2]]
   p_dendo_ward_8cl <- env_dd_dendo_ward_8cl[[2]]
   
   env_dd_dep_cor_ward_cl5 <- merge(env_dd_dep_cor, env_dd_dendo_ward_5cl[[1]],
-                                  by.x='NOM', by.y='ID')
+                                   by.x='NOM', by.y='ID')
   
   p_cluster_boxplot_ward5 <- ggplot(env_dd_dep_cor_ward_cl5, 
-         aes(x=factor(gclass), y=cor, color=factor(gclass))) +
+                                    aes(x=factor(gclass), y=cor, color=factor(gclass))) +
     geom_boxplot() +
     geom_jitter(color="black", size=0.4, alpha=0.9) +
     geom_hline(yintercept=0) +
@@ -1445,7 +1445,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     geom_jitter(color="black", size=0.4, alpha=0.9) +
     geom_hline(yintercept=0) +
     facet_wrap(~description)
-
+  
   
   #Correlation among variables  ------------------------------------------------
   var_cor <- dt_sub[, driver_cols_dt$variable, with=F] %>%
@@ -1454,11 +1454,11 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     setnames(gsub("surface water", "sw", names(.))) %>%
     setnames(gsub("gw", "gw", names(.))) %>%
     cor( method='spearman', use="pairwise.complete.obs")
-
+  
   p_varscor <- ggcorrplot(var_cor, #method = "circle", 
-                            hc.order = TRUE, hc.method = 'average',
-                            type = "upper", lab=T, lab_size =3,
-                            digits=1, insig='blank',
+                          hc.order = TRUE, hc.method = 'average',
+                          type = "upper", lab=T, lab_size =3,
+                          digits=1, insig='blank',
                           outline.color = "white") +
     scale_fill_distiller(
       name=str_wrap("Correlation coefficient Spearman's rho", 20),
@@ -1479,7 +1479,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   env_dd_dep_cormat[abs(env_dd_dep_cormat)<0.3] <- NA
   
   env_dd_dep_cormat_avg8cl <- env_dd_dep_cormat[env_dd_dep_hclust_avg$order,]
-    #as.data.table(env_dd_dendo_avg_8cl[[1]])[order(ID),order(gclass)],]
+  #as.data.table(env_dd_dendo_avg_8cl[[1]])[order(ID),order(gclass)],]
   
   class_colors_avg_8cl <- classcol[as.data.table(
     env_dd_dendo_avg_8cl[[1]])[order(gclass, ID),gclass]]
@@ -1502,7 +1502,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Plot heatmap of env-dd correlations, clustered
   env_dd_dep_cormat_ward8cl <- env_dd_dep_cormat[env_dd_dep_hclust_ward$order,]
-
+  
   class_colors_ward_8cl <- classcol[as.data.table(
     env_dd_dendo_ward_8cl[[1]])[order(gclass, ID),gclass]]
   
@@ -1515,7 +1515,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     scale_fill_distiller(
       name=str_wrap("Correlation coefficient Spearman's rho", 20),
       palette='RdBu', 
-      limits=c(-0.8, 0.81), 
+      limits=c(-0.81, 0.81), 
       breaks=c(-0.7, -0.5, 0, 0.5, 0.7))  +
     coord_flip() +
     theme(axis.text.y = element_text(
@@ -1523,7 +1523,9 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   
   return(list(
-    excluded_deps = excluded_deps 
+    env_dd_melt = env_dd_melt
+    , env_dd_dep_cor = env_dd_dep_cor
+    , excluded_deps = excluded_deps 
     , p_cophcor_avg = p_cophcor_avg
     , p_scree_avg =p_scree_avg
     , p_cophcor_ward = p_cophcor_ward
@@ -1535,6 +1537,227 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     , env_ddratio_corheatmap_avg8cl = env_ddratio_corheatmap_avg8cl
     , env_ddratio_corheatmap_ward8cl = env_ddratio_corheatmap_ward8cl
   ))
+}
+
+#--------------------  plotmap_envdd_cors --------------------------------------
+# in_envdd_multivar_analysis = tar_read(envdd_multivar_analysis)
+# in_env_dd_merged_bv <- tar_read(env_dd_merged_bv)
+# in_bvdep_inters_gdb_path <- tar_read(bvdep_inters_gdb_path)
+# in_ddtnets_path <-  tar_read(ddtnets_path)
+# in_deps_path = tar_read(deps_shp_path)
+
+plotmap_envdd_cors <- function(in_envdd_multivar_analysis,
+                               in_env_dd_merged_bv,
+                               in_bvdep_inters_sp_path,
+                               in_ddtnets_path,
+                               in_deps_path) {
+  
+  #Join environmental and drainage density attributes to basin vector
+  bvdep_inters_vect <- vect(dirname(in_bvdep_inters_gdb_path),
+       layer=basename(in_bvdep_inters_gdb_path))
+  
+  bvdep_env_vect <- merge(bvdep_inters_vect,
+                     in_env_dd_merged_bv, 
+                     by=c('UID_BV',"INSEE_DEP", "PFAF_ID08", "PFAF_ID09"),
+                     all.x=T)
+  
+  #Read in french departments 
+  deps_vect <-  vect(in_deps_path) %>%
+    terra::simplifyGeom(tolerance=1000,
+                        preserveTopology=T,
+                        makeValid=T)
+  
+  #Make an overall map of French departments
+  dep_map_all <- ggplot(deps_vect[deps_vect$INSEE_REG != 94]) + 
+    geom_spatvector(fill='white', color='grey') + 
+    theme_minimal()
+  
+  #Subset correlation data table to only keep those > 0.5 and get associated
+  #drainage density and environmental data
+  env_dd_cor_o05 <- in_envdd_multivar_analysis$env_dd_dep_cor[
+    abs(cor)>=0.5,] %>%
+    merge(in_envdd_multivar_analysis$env_dd_melt, .,
+          by=c('NOM', 'INSEE_DEP', 'description'))
+  
+  #Function to map classified drainage network and environmental variable
+  map_env_ddtnet_dep <- function(in_dep_num,
+                                 in_dep_name,
+                                 in_var_descr,
+                                 in_driver,
+                                 in_ddtnets_path,
+                                 in_bvdep_env_vect,
+                                 in_deps_vect,
+                                 in_dep_map_all
+  ) {
+    
+    dep_netlyr <- paste0('D', in_dep_num, '_', gsub('-', '_', in_dep_name))
+    
+    SQLquery <- paste0("SELECT * FROM ",
+                       basename(in_ddtnets_path),
+                       " WHERE orig_layer = '", dep_netlyr, "'")
+    
+    type_stand_levels <- c("Cours d'eau", "Indéterminé",
+                           "Non cours d'eau", "Inexistant")
+    type_stand_labels <- c("Watercourse", "Unclassified",
+                           "Non-watercourse", "Inexistant")
+    ddtnet_dep <- vect(
+      x = dirname(in_ddtnets_path),
+      layer = basename(in_ddtnets_path),
+      query = SQLquery
+    ) 
+    ddtnet_dep$type_stand <- factor(ddtnet_dep$type_stand, 
+                                    levels=type_stand_levels)
+    ddtnet_dep <- ddtnet_dep[ddtnet_dep$type_stand != "Hors département",]
+    #Subset basins for the department
+    bvdep_env_sub <- in_bvdep_env_vect[in_bvdep_env_vect$INSEE_DEP==dep_num,]
+    
+    #Make a map of French departments with the highlighted department
+    deps_vect_sub <- in_deps_vect[in_deps_vect$INSEE_DEP==dep_num,]
+    
+    dep_map_sub <- dep_map_all + 
+      geom_spatvector(data=deps_vect_sub,
+                      fill='black', color='black') +
+      theme_classic() + 
+      coord_sf(expand = FALSE) +
+      theme(axis.line = element_blank(),
+            axis.text = element_blank(),
+            axis.ticks = element_blank())
+    
+    #Plot
+    main_map <- ggplot(bvdep_env_sub) +
+      tidyterra::geom_spatvector(aes(fill=get(as.character(driver))), 
+                                 alpha=0.75) +
+      tidyterra::geom_spatvector(data=ddtnet_dep,
+                      aes(color=type_stand),
+                      key_glyph = 'timeseries') +
+      tidyterra::scale_fill_whitebox_c(name=in_var_descr, 
+                            palette='arid') +
+      scale_color_manual(
+        name = 'Watercourse status',
+        values=c("#0b5da2ff", "#138f60ff", #https://thenode.biologists.com/data-visualization-with-flying-colors/research/
+                 "#c94905ff", "#de8e08ff"),  #cours d'eau, indéterminé, non cours d'eau, inexistant
+        labels=type_stand_labels,
+        guide = "none") + 
+      #guides(color = guide_legend(override.aes = list(linewidth = 1.3))) +
+      coord_sf(expand = FALSE) +
+      ggspatial::annotation_scale(style='ticks') +
+      theme_classic() + 
+      theme(axis.line = element_blank(),
+            axis.text = element_blank(),
+            axis.ticks = element_blank(),
+            legend.position = "bottom",
+            legend.direction = "horizontal"
+            )
+    
+    inset_layout <- "
+    AAAB
+    AAA#
+    AAA#"
+    
+    out_map <-  main_map + 
+      dep_map_sub +
+      plot_layout(design=inset_layout) +
+      plot_annotation(in_dep_name)
+    
+    return(out_map)
+  }
+  
+  scatter_env_ddtnet <-  function(in_dt_driver) {
+    p <- ggplot(in_dt_driver,
+                aes(x=value,
+                    y=ddt_to_bdtopo_ddratio_ceind)) +
+      geom_point(aes(size=bv_area, 
+                     color=cor)) +
+      geom_smooth(#aes(weight=bv_area),
+        method='gam',
+        #family='lognormal',
+        formula = y ~ s(x, bs = "cs", fx = TRUE, k =3),
+        color='black') +
+      scale_x_continuous(name=unique(in_dt_driver$description)) +
+      scale_y_continuous(name='Ratio of drainage density:
+                         length(watercourses + unclassified)/length(BD TOPO)') +
+      scale_size_continuous(name="Sub-basin area<br>(km<sup>2</sup>)",
+                            breaks=c(20, 50, 100, 250, 500)) +
+      scale_color_distiller(name='rho',
+                            palette='RdBu', 
+                            limits=c(-0.81, 0.81),
+                            breaks=c(-0.8, -0.5, 0, 0.5, 0.8)) +
+      coord_cartesian(ylim=c(0, max(in_dt_driver$ddt_to_bdtopo_ddratio_ceind)+0.1), 
+                      expand=FALSE) +
+      facet_wrap(~NOM+paste('rho =', round(cor,2)), 
+                 scales='free_x') +
+      theme_classic() +
+      theme(panel.grid.minor=element_blank(),
+            strip.background = element_rect(fill="gray95",
+                                            color="gray95",
+                                            linewidth=NULL),
+            legend.title = ggtext::element_markdown()
+            )
+    return(p)
+  } 
+  
+  driver_dd_plots <- lapply(
+    unique(env_dd_cor_o05$variable), function(driver) {
+      print(paste("Creating plot for", driver))
+      
+      dt_driver <- env_dd_cor_o05[variable==driver,]
+      dt_driver[, NOM := factor(NOM, levels=unique(dt_driver$NOM[order(cor)]))]
+      
+      #----------------------- CREATE MAPS -------------------------------------
+      if (min(dt_driver$cor)<0) {
+        min_dep_dt <- dt_driver[cor==min(cor),]
+        dep_num <- unique(min_dep_dt$INSEE_DEP)
+        dep_name <- unique(min_dep_dt$NOM)
+        var_descr <- unique(min_dep_dt$description)
+        
+        p_map_min <- map_env_ddtnet_dep(in_dep_num = dep_num,
+                                        in_dep_name = dep_name,
+                                        in_var_descr = var_descr,
+                                        in_driver = driver,
+                                        in_ddtnets_path = in_ddtnets_path,
+                                        in_bvdep_env_vect = bvdep_env_vect,
+                                        in_deps_vect = deps_vect,
+                                        in_dep_map_all = dep_map_all
+        )
+      } else {
+        p_map_min <- plot_spacer()
+      }
+      
+      if (max(dt_driver$cor)>0) {
+        min_dep_dt <- dt_driver[cor==max(cor),]
+        dep_num <- unique(min_dep_dt$INSEE_DEP)
+        dep_name <- unique(min_dep_dt$NOM)
+        var_descr <- unique(min_dep_dt$description)
+        
+        p_map_max <- map_env_ddtnet_dep(in_dep_num = dep_num,
+                                        in_dep_name = dep_name,
+                                        in_var_descr = var_descr,
+                                        in_driver = driver,
+                                        in_ddtnets_path = in_ddtnets_path,
+                                        in_bvdep_env_vect = bvdep_env_vect,
+                                        in_deps_vect = deps_vect,
+                                        in_dep_map_all = dep_map_all
+        )
+      } else {
+        p_map_max <- plot_spacer()
+      }
+      
+      p_scatter <- scatter_env_ddtnet(in_dt_driver=dt_driver)
+      
+      final_layout <- "
+      AABBB
+      AABBB
+      AACCC
+      AACCC
+      "
+      
+      final_p <- p_scatter + p_map_min + p_map_max +
+        plot_layout(design=final_layout)
+      return(final_p)
+    }
+    )
+  
+  return(driver_dd_plots)
 }
 
 
@@ -1575,29 +1798,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
 # 
 # sum(env_dd_cor_o05$bv_area<20)
 # 
-# driver_dd_plots <- lapply(driver_cols, function(driver) {
-#   dt_driver <- env_dd_cor_o05[variable==driver,]
-#   
-#   dt_driver[, NOM := factor(NOM, levels=unique(dt_driver$NOM[order(cor)]))]
-#   
-#   p <- ggplot(dt_driver,
-#               aes(x=value, y=ddt_to_bdtopo_ddratio_ce)
-#   ) +
-#     geom_point(aes(size=bv_area, color=cor)) +
-#     geom_smooth(aes(weight=bv_area),
-#                 method='glm',
-#                 family='lognormal',
-#                 #formula = y ~ s(x, bs = "cs", fx = TRUE, k =3),
-#                 color='black') +
-#     scale_x_continuous(name=unique(dt_driver$description)) +
-#     scale_size_continuous(breaks=c(20, 50, 100, 250, 500)) +
-#     scale_color_distiller(palette='Spectral', limits=c(-0.8, 0.8)) +
-#     facet_wrap(~NOM+round(cor,2), scales='free') +
-#     theme_classic() +
-#     theme(panel.grid.minor=element_blank())
-#   
-#   return(p)
-# })
+
 # driver_dd_plots[[1]]
 # driver_dd_plots[[2]]
 # driver_dd_plots[[3]]
