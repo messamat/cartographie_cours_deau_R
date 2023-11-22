@@ -234,7 +234,8 @@ list(
   tar_target(
     envdd_dep_plots,
     plot_envdd_dep(in_drainage_density_summary=drainage_density_summary,
-                   in_env_dd_merged_dep = env_dd_merged_dep)
+                   in_env_dd_merged_dep = env_dd_merged_dep,
+                   in_varnames=varnames)
   ),
   
   tar_target(
@@ -257,14 +258,57 @@ list(
                      in_varnames=varnames,
                      in_bvdep_inters=bvdep_inters_tab)
   )
-  # ,
-  # 
-  # tar_target(
-  #   envdd_plot_correlations,
-  #    plotmap_envdd_cors(iin_envdd_multivar_analysis=envdd_multivar_analysis,
-  #in_env_dd_merged_bv=env_dd_merged_bv,
-  # in_bvdep_inters_gdb_path= bvdep_inters_gdb_path,
-  # in_ddtnets_path = ddtnets_path,
-  # in_deps_path = deps_shp_path)
-  # )
+  ,
+  
+  tar_target(
+    envdd_plot_correlations,
+    plotmap_envdd_cors(in_envdd_multivar_analysis=envdd_multivar_analysis,
+                       in_env_dd_merged_bv=env_dd_merged_bv,
+                       in_bvdep_inters_gdb_path=bvdep_inters_gdb_path,
+                       in_ddtnets_path=ddtnets_path,
+                       in_deps_path=deps_shp_path)
+  ),
+  
+  tar_target(
+    output_plots,
+    lapply(seq(1, length(envdd_plot_correlations)), function(plot_i) {
+      ggsave(paste0("envdd_plot_correlatons", plot_i, ".png"), 
+             envdd_plot_correlations[[plot_i]],
+             width = 180, height=185, units='mm', dpi=300
+      )
+    })
+    ),
+    
+    tar_target(
+      output_plots2,
+      ggsave(paste0("envdd_dep_plots.png"), 
+             envdd_dep_plots$dd_scatter_dep,
+             width = 180, height=180, units='mm', dpi=300
+      )
+    ),
+  
+  tar_target(
+    output_plots3,
+    ggsave(paste0("ddratio_bars_dep.png"), 
+           envdd_dep_plots$ddratio_bars_dep,
+           width = 180, height=180, units='mm', dpi=300
+    )
+  ),
+  
+  tar_target(
+    output_plots4,
+    ggsave(paste0("env_lengthratio_bdtopo.png"), 
+           envdd_dep_plots$env_lengthratio_bdtopo,
+           width = 180, height=180, units='mm', dpi=300
+    )
+  ),
+  
+  tar_target(
+    output_plots5,
+    ggsave(paste0("env_ddratio_corheatmap_avg8cl.png"), 
+           envdd_multivar_analysis$env_ddratio_corheatmap_avg8cl,
+           width = 250, height=300, units='mm', dpi=300
+    )
+  )
+  
 )
