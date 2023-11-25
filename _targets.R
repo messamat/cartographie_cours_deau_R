@@ -15,31 +15,23 @@ list.files(resdir)
 list(
   #------------------------------- Read files ----------------------------------
   #Read in metadata
-  tar_target(ddt_metadata_path,
-             file.path(datdir, 
-                       'metadonnes_cartographie_cours_deau_20231106.xlsx')
-  ) #format='file'
-  ,
-  tar_target(ddt_nets_colnas_path,
-             file.path(resdir, 
-                       'cartos_loi_eau_colNAs.csv'),
-             format='file'
-  ) 
-  ,
+  tar_target(ddt_metadata_path, file.path(datdir, 'metadonnes_cartographie_cours_deau_20231106.xlsx')), #format='file'
+  tar_target(ddt_nets_colnas_path, file.path(resdir, 'cartos_loi_eau_colNAs.csv'), format='file') ,
   #Path to actual river network
   tar_target(ddtnets_path, file.path(resdir, 'analysis_outputs.gdb', 'carto_loi_eau_fr')),
-  
   #Path to departments
   tar_target(deps_shp_path, file.path(datdir, 'données_auxiliaires', 'admin_express',
                                   'ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16',
                                   'ADMIN-EXPRESS', '1_DONNEES_LIVRAISON_2023-10-16',
                                   'ADE_3-2_SHP_LAMB93_FXX', 'DEPARTEMENT.shp'),
-             format='file'
-  ),
+             format='file'),
   
   #Establish file paths (to be reactive to file updates)
+  tar_target(ddtnets_bdtopo_polyinters_path, file.path(resdir, 'carto_loi_eau_bdtopo_inters_tab.csv'), format='file'),   #Path to spatial intersection of DDT river networks with 1-m polygons around BD TOPO and BD Carthage river networks
+  tar_target(ddtnets_carthage_polyinters_path, file.path(resdir, 'carto_loi_eau_carthage_inters_tab.csv'), format='file'),
+  
   tar_target(bvdep_inters_gdb_path, file.path(resdir, 'preprocessing_ancillary_data.gdb', 'BV_hybas0809_depsinters')),
-  tar_target(bvdep_inters_csv_path, file.path(resdir, 'BV_hybas0809_depsinters.csv')),
+  tar_target(bvdep_inters_csv_path, file.path(resdir, 'BV_hybas0809_depsinters.csv'), format='file'),
   
   tar_target(varnames_path, file.path(datdir, 'variable_names_metadata.csv'), format='file'),
   
@@ -61,6 +53,10 @@ list(
   tar_target(bnpe_withdrpts_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_prelevements.csv'), format = 'file'),
   tar_target(bnpe_ouvrages_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_ouvrages.csv'), format = 'file'),
   
+  tar_target(onde_ddtnets_spjoin_path, file.path(resdir, "onde_carto_loi_eau_spjoin.csv"),format = 'file'),
+  tar_target(fish_ddtnets_spjoin_path, file.path(resdir, "fish_stations_aspe_carto_loi_eau_spjoin.csv"),format = 'file'), 
+  tar_target(hydrobio_ddtnets_spjoin_path, file.path(resdir, "hydrobio_stations_naiade_carto_loi_eau_spjoin.csv"),format = 'file'),
+
   #Read in DDT metadata
   tar_target(metadata_sources, read_xlsx(path = ddt_metadata_path, sheet="Sources")),
   tar_target(
@@ -75,10 +71,14 @@ list(
   
   #"skip", "guess", "logical", "numeric", "date", "text" or "list"
   
+  #Path to spatial intersection of DDT river networks with 1-m polygons around BD TOPO and BD Carthage river networks
+  tar_target(ddtnets_bdtopo_polyinters, fread(ddtnets_bdtopo_polyinters_path)),
+  tar_target(ddtnets_carthage_polyinters, fread(ddtnets_carthage_polyinters_path)),
+  
   #Read in units of analysis csv
   tar_target(bvdep_inters_tab, fread(bvdep_inters_csv_path)),
   
-  #Read in variable names for displa
+  #Read in variable names for display
   tar_target(varnames, fread(varnames_path)),
   
   #Read in csvs of networks
@@ -101,6 +101,10 @@ list(
   tar_target(bnpe_withdrpts, fread(bnpe_withdrpts_path)),
   tar_target(bnpe_ouvrages, fread(bnpe_ouvrages_path)),
   
+  #Read in csvs of point data
+  tar_target(onde_ddtnets_spjoin, fread(onde_ddtnets_spjoin_path)), 
+  tar_target(fish_ddtnets_spjoin, fread(fish_ddtnets_spjoin_path)),
+  tar_target(hydrobio_ddtnets_spjoin, fread(hydrobio_ddtnets_spjoin_path)), 
   
   #Read and merge gdb tables
   tar_target(
@@ -171,6 +175,17 @@ list(
     format_metadata_nets(metadata_nets)
   ),
   
+  #Match segments in the DDT networks to those in BD TOPO or BD Carthage 
+  #based on outputs from spatial intersection
+  # tar_target(
+  #   ddtnets_refids_imputed,
+  #   imput_refids_ddtnets(in_ddtnets_path = ddtnets_path,
+  #                        in_ddtnets_bdtopo_polyinters = ddtnets_bdtopo_polyinters,
+  #                        in_ddtnets_carthage_polyinters = ddtnets_carthage_polyinters)
+  #   
+  #   
+  # ),
+  
   tar_target(
     ddtnets_bvinters_stats,
     format_ddtnets_bvinters(in_ddtnets_bvinters = ddtnets_bvinters,
@@ -204,6 +219,16 @@ list(
     format_rht(in_rht_bvinters = rht_bvinters) 
   ),
   
+  #----------- Evaluate coverage of point-based monitoring networks ------------
+  # tar_target(
+  #   evaluate_onde_coverage(in_onde_ddtnets_spjoin=onde_ddtnets_spjoin,)
+  # ),
+  # tar_target(
+  #   evaluate_fish_coverage(in_fish_ddtnets_spjoin=fish_ddtnets_spjoin)
+  # ),
+  # tar_target(
+  #   evaluate_hydrobio_coverage(in_fish_ddtnets_spjoin=fish_ddtnets_spjoin)
+  # ),
   #------------------------------- analyze data --------------------------------
   tar_target(
     drainage_density_summary,

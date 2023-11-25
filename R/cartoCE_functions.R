@@ -144,6 +144,55 @@ format_metadata_nets <- function(in_metadata_nets) {
   return( mdat_dt_uform)
 }
 
+#-------------------------- imput_refids_ddtnets -------------------------------
+# in_ddtnets_path = tar_read(ddtnets_path)
+# in_ddtnets_bdtopo_polyinters = tar_read(ddtnets_bdtopo_polyinters)
+# in_ddtnets_carthage_polyinters = tar_read(ddtnets_carthage_polyinters)
+
+imput_refids_ddtnets <- function(in_ddtnets_path,
+                                 in_ddtnets_bdtopo_polyinters,
+                                 in_ddtnets_carthage_polyinters) {
+  ddtnet <- vect(
+    x = dirname(in_ddtnets_path),
+    layer = basename(in_ddtnets_path)
+  )
+  ddtnet_OID <- unique(geom(ddtnet)[,1])
+  ddtnet <- as.data.table(ddtnet) %>%
+    .[, OBJECTID := ddtnet_OID]
+  
+  ddtnet[OBJECTID==2146285,]
+  
+  in_ddtnets_bdtopo_polyinters[duplicated(FID_carto_loi_eau_fr),.N]
+  
+  ddtnet_bdtopo <- merge(in_ddtnets_bdtopo_polyinters,
+                         ddtnet,
+                         by.x='FID_carto_loi_eau_fr',
+                         by.y='OBJECTID',
+                         all.x=T
+                         ) %>%
+    .[
+      , `:=`(
+      inters_to_bdtopo_ratio = length_inters_bdtopo/length_bdtopo,
+      inters_to_ddt_ratio =length_inters_bdtopo/geom_Length
+      )] %>%
+    .[!is.infinite(inters_to_bdtopo_ratio) & !is.infinite(inters_to_ddt_ratio),] #Take out records for which the intersection is a single point
+   
+  
+  ddtnet_bdtopo
+  
+  ddtnet_bdtopo_nodupliddt <-  ddtnet_bdtopo[
+    order(-inters_to_ddt_ratio, -inters_to_bdtopo_ratio),
+    .SD[!duplicated(FID_carto_loi_eau_fr),] #Keep the BD Topo record with the highest intersect with the DDT line
+  ]
+  
+  check <- ddtnet_bdtopo[inters_to_bdtopo_ratio > 0.95 & 
+                  inters_to_ddt_ratio > 0.95 & is.na(id),]
+  ddtnet_bdtopo[(inters_to_bdtopo_ratio < 0.95 | 
+                  inters_to_ddt_ratio < 0.95) & !is.na(id), .N]
+    
+  
+  
+}
 #-------------------------- format_carthage ------------------------------------
 #in_carthage_bvinters <- tar_read(carthage_bvinters)
 format_carthage <- function(in_carthage_bvinters) {
@@ -777,6 +826,98 @@ compile_all_env <- function(in_bvdep_inters,
   ))
 }
 
+############################ Evaluate coverage of point-based monitoring networks #######
+in_onde_ddtnets_spjoin <- tar_read(onde_ddtnets_spjoin)
+evaluate_onde_coverage <- function(in_onde_ddtnets_spjoin,
+                                   in_ddtnets) {
+
+  #Exclude Charente-Maritimes
+  #check which type_stand are associated with those removed because they didn't exist and those because of nce
+  #to count them, make sure to remove duplicate geometries; check names
+  
+  #Manual checking ONDE sites that are on a BD Topo or BD carthage segment but not on a DDT segment by looking at all those
+  #beyong 30 m from a DDT segment
+  #CdSiteHydro: M1060001, M1050001, F4620002, P1130001, P3110001, P1560002, P3322511, P3800001, P3800002, P1560002
+  #Manual checking ONDE sites whose closest site is a non-watercourse:
+  #B5130001, Y4306511, V7300001, X3500011, X3500012, H0220001, K4320001
+}
+
+#in_fish_ddtnets_spjoin <- tar_read(fish_ddtnets_spjoin)
+evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin) {
+  #Check whether those had fauna
+  #Exclude Charente-Maritimes
+  #check which type_stand are associated with those removed because they didn't exist and those because of nce
+  #to count them, make sure to remove duplicate geometries; check names
+  
+  #Manual checking ASPE fish stations that are on a BD Topo or BD Carthage segment but not on a DDT segment by looking at all those
+  #beyong 30 m from a DDT segment:
+  # 6545, 6554, 6578, 6541, 23751, 6574, 6553, 6560,
+  #6560, 6936, 6556, 1344, 23751, 6574,
+  # 6553, 6560, 6584, 22485, 6567, 6577,
+  # 22490, 22488, 10592, 6558, 6547, 20583,
+  # 125125, 6540, 6588, 6537, 6557, 6543,
+  # 6543, 6573, 6571, 6570, 6583, 6552,
+  # 6586, 22475, 6576, 6559, 6563, 6548,
+  # 10577, 2988250, 234, 101497, 101493,
+  # 101495, 2988253,2988255, 2988257, 2988258,
+  # 6585, 6624, 6920, 1642642, 86326, 86327,
+  # 86347, 86387, 86388, 86401,
+  # 6542, 6572, 16397, 16400, 16555,
+  # 17349, 17351, 17369,  113287,  188,
+  # 233, 23801, 23802, 23815, 42635,
+  # 1643265, 12551, 12555, 1663645,
+  # 10591, 10578, 10590,125139,6549,
+  # 6550, 6561, 6581, 6575, 6582, 8410,
+  # 5848, 6565, 6568, 6551, 6544,6538,
+  # 6562, 6569,6566,6539, 125156, 832088,
+  # 6871, 20930, 43520, 1620, 20873, 13549,
+  # 5839, 6959, 2318, 2355, 5258, 40871,
+  # 86216, 4837, 3336080, 86206 (nothing on the satellite imagery),
+  # 2358, 11915, 5880, 6921, 26319, 86846,
+  # 5720, 21844, 5858, 3336072, 86198, 2921228,
+  # 5721, 4037, 157, 10572, 23001, 26284,
+  # 2837719, 3727185, 8309, 6606, 6674,
+  # 12422, 86389, 86299, 86300, 5855, 10377,
+  # 2998456, 13689, 6555, 908, 2342, 269894,
+  # 6958, 359302, 14982, 5510, 24390, 13612,
+  # 6607, 86315, 86332, 86363, 13613, 5175,
+  # 42633, 24389, 3336081, 86993, 86887, 86888,
+  # 86889, 86890, 86891, 86892, 86893, 86903, 86904,
+  # 5847, 1875527, 16060, 3371, 5061
+  
+  #Manual checking ASPE sites whose closest segment is a non-watercourse:
+  #42868, 3413236, 42869, 111291, 15487, 15466, 15489, 2533,111217, 3864, 3865, 670074, 2900015, 1642151, 6357, 2526
+  # 25350, 2532,26026, 1646314, 1857, 1295463, 19217, 24807, 15471, 2792, 670075, 3399701, 18520,  24670, 26811, 16100,
+  # 4927, 4932, 3062, 1266863, 47949, 15482, 25225, 86202, 86204, 86298, 17035, 17101, 17210, 15479, 15490, 2210325,
+  # 14343, 42819, 43001, 2185,2344,1858, 333, 30563, 1859, 47946, 19198, 19210, 19806, 20024, 20035, 25415, 2604, 8194,
+  # 2702, 8316, 4276
+}
+
+#in_hydrobio_ddtnets_spjoin <- tar_read(hydrobio_ddtnets_sp_oin)
+evaluate_hydrobio_coverage <- function(in_fish_ddtnets_spjoin) {
+  #Check whether those had fauna
+  #Exclude Charente-Maritimes
+  #check which type_stand are associated with those removed because they didn't exist and those because of nce
+  #to count them, make sure to remove duplicate geometries; check names
+  
+  #Manual checking Hydrobio fish stations that are on a BD Topo or BD Carthage segment but not on a DDT segment by looking at all those
+  #beyong 30 m from a DDT segment:
+  # 04164950, 04306005, 05068475, 02093200, 04362016, 04055825, 02118000,
+  # 02120050, 05225085, 05225090, 02120400, 03149229, 01059000, 04401016,
+  # 03269250, 03189652, 03149223, 04379004, 02042865, 02118748, 03207021,
+  # 04371012, 03035734
+  
+  #Manual checking DCE hydrobio sites whose closest segment is a non-watercourse:
+  # 01115300, 01119500, 02098396, 02098397
+  # 02098398, 02114270, 02119000, 02120100,
+  # 03006417, 03006590, 03011740, 03014470,
+  # 03020188, 03085521, 04431025, 04441014,
+  # 05111000, 05118795, 05234025, 06011900,
+  # 06011965, 06039915, 06041810, 06048420,
+  # 06580182, 06580359, 06590892, 06830132,
+}
+
+
 ############################ ANALYZE DRAINAGE DENSITY ################################
 #-------------------------- summarize_drainage_density ---------------------------
 # 
@@ -1038,7 +1179,7 @@ plot_envdd_dep <- function(in_drainage_density_summary,
                            in_bvdep_inters,
                            in_varnames) {
   dep_stats <- in_drainage_density_summary$nets_stats_melt_dep
-
+  
   #------------------------- Plots of drainage density and deviation -----------
   #Scartterplot of drainage density at department level (without Paris)
   p_dd_scatter_dep <- ggplot(
@@ -1104,24 +1245,24 @@ plot_envdd_dep <- function(in_drainage_density_summary,
   #------------------------- Plots of drivers of drainage density deviation -----------
   driver_cols_dt <- data.table(
     driver=c('agr_pc_sse'
-    , 'pst_pc_sse'
-    , 'wcr_pc_sse'
-    , 'orc_pc_sse'
-    , 'vny_pc_sse'
-    , 'awc_mm_sav'
-    , 'imp_pc_sse'
-    , 'ppc_pk_sav'
-    , 'ari_ix_ssu'
-    , 'ari_ix_syr'
-    , 'irs_pc_sav'
-    , 'ire_pc_sse'
-    , 'vww_mk_syr_Souterrain_IRRIGATION'
-    , 'vww_mk_syr_Souterrain_EAU_POTABLE'
-    , 'vww_mk_syr_Surface_continental_IRRIGATION'
-    , 'vww_mk_syr_Surface_continental_EAU_POTABLE'
-    , 'slo_dg_sav'
-    , 'bar_bk_ssu_TOTAL')
-    ) %>%
+             , 'pst_pc_sse'
+             , 'wcr_pc_sse'
+             , 'orc_pc_sse'
+             , 'vny_pc_sse'
+             , 'awc_mm_sav'
+             , 'imp_pc_sse'
+             , 'ppc_pk_sav'
+             , 'ari_ix_ssu'
+             , 'ari_ix_syr'
+             , 'irs_pc_sav'
+             , 'ire_pc_sse'
+             , 'vww_mk_syr_Souterrain_IRRIGATION'
+             , 'vww_mk_syr_Souterrain_EAU_POTABLE'
+             , 'vww_mk_syr_Surface_continental_IRRIGATION'
+             , 'vww_mk_syr_Surface_continental_EAU_POTABLE'
+             , 'slo_dg_sav'
+             , 'bar_bk_ssu_TOTAL')
+  ) %>%
     merge(in_varnames, by.x='driver', by.y='variable', sort=F) 
   stat_cols <- c('INSEE_DEP', 'lengthratio_ddt_ce_to_other',
                  'lengthratio_ddt_ceind_to_other','per_ce', 'per_nce')
@@ -1530,11 +1671,11 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
 }
 
 #-------------------------- plotmap_envdd_cors --------------------------------------
-in_envdd_multivar_analysis = tar_read(envdd_multivar_analysis)
-in_env_dd_merged_bv <- tar_read(env_dd_merged_bv)
-in_bvdep_inters_gdb_path <- tar_read(bvdep_inters_gdb_path)
-in_ddtnets_path <-  tar_read(ddtnets_path)
-in_deps_path = tar_read(deps_shp_path)
+# in_envdd_multivar_analysis = tar_read(envdd_multivar_analysis)
+# in_env_dd_merged_bv <- tar_read(env_dd_merged_bv)
+# in_bvdep_inters_gdb_path <- tar_read(bvdep_inters_gdb_path)
+# in_ddtnets_path <-  tar_read(ddtnets_path)
+# in_deps_path = tar_read(deps_shp_path)
 
 plotmap_envdd_cors <- function(in_envdd_multivar_analysis,
                                in_env_dd_merged_bv,
@@ -1544,12 +1685,12 @@ plotmap_envdd_cors <- function(in_envdd_multivar_analysis,
   
   #Join environmental and drainage density attributes to basin vector
   bvdep_inters_vect <- vect(dirname(in_bvdep_inters_gdb_path),
-       layer=basename(in_bvdep_inters_gdb_path))
+                            layer=basename(in_bvdep_inters_gdb_path))
   
   bvdep_env_vect <- merge(bvdep_inters_vect,
-                     in_env_dd_merged_bv, 
-                     by=c('UID_BV',"INSEE_DEP", "PFAF_ID08", "PFAF_ID09"),
-                     all.x=T)
+                          in_env_dd_merged_bv, 
+                          by=c('UID_BV',"INSEE_DEP", "PFAF_ID08", "PFAF_ID09"),
+                          all.x=T)
   
   #Read in french departments 
   deps_vect <-  vect(in_deps_path) %>%
@@ -1621,10 +1762,10 @@ plotmap_envdd_cors <- function(in_envdd_multivar_analysis,
       tidyterra::geom_spatvector(aes(fill=get(as.character(in_driver))), 
                                  alpha=0.75) +
       tidyterra::geom_spatvector(data=ddtnet_dep,
-                      aes(color=type_stand),
-                      key_glyph = 'timeseries') +
+                                 aes(color=type_stand),
+                                 key_glyph = 'timeseries') +
       tidyterra::scale_fill_whitebox_c(name=in_var_descr, 
-                            palette='arid') +
+                                       palette='arid') +
       scale_color_manual(
         name = 'Watercourse status',
         values=c("#0b5da2ff", "#138f60ff", #https://thenode.biologists.com/data-visualization-with-flying-colors/research/
@@ -1640,7 +1781,7 @@ plotmap_envdd_cors <- function(in_envdd_multivar_analysis,
             axis.ticks = element_blank(),
             legend.position = "bottom",
             legend.direction = "horizontal"
-            )
+      )
     
     inset_layout <- "
     AAAB
@@ -1678,8 +1819,8 @@ plotmap_envdd_cors <- function(in_envdd_multivar_analysis,
       coord_cartesian(ylim=c(0, 
                              min(2,
                                  max(in_dt_driver$ddt_to_bdtopo_ddratio_ceind)+0.1)
-                             ), 
-                      expand=FALSE) +
+      ), 
+      expand=FALSE) +
       facet_wrap(~NOM+paste('rho =', round(cor,2)), 
                  scales='free_x') +
       theme_classic() +
@@ -1688,7 +1829,7 @@ plotmap_envdd_cors <- function(in_envdd_multivar_analysis,
                                             color="gray95",
                                             linewidth=NULL),
             legend.title = ggtext::element_markdown()
-            )
+      )
     return(p)
   } 
   
@@ -1749,7 +1890,7 @@ plotmap_envdd_cors <- function(in_envdd_multivar_analysis,
         plot_layout(design=final_layout)
       return(final_p)
     }
-    )
+  )
   
   return(driver_dd_plots)
 }
