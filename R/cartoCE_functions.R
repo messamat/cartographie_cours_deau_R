@@ -80,7 +80,7 @@ format_metadata_nets <- function(in_metadata_nets) {
     c("Nom de l'attribut auxiliaire désignant le type d'écoulement", "type_aux_name"),
     c("Nom de l'attribut désignant le régime hydrologique", "regime_name"),
     c("Nom de l'attribut désignant la méthode d'identification de l'écoulement", "nat_id_name"),
-    c("Nom de l'attribut désignant la source de la modification; de la suppression du tronçon BD TOPO®; ou de l’ajout d’un nouveau tronçon", "orig_mo_name"),
+    c("Nom de l'attribut désignant la source de la modification; de la suppression du tronçon BD TOPO; ou de l’ajout d’un nouveau tronçon", "orig_mo_name"),
     c("Nom de l'attribut désignant la date de l'identification du type d'écoulement", "date_id_name"),
     c("Origine des données", "data_orig"),
     c("Commentaire", "com"),
@@ -447,6 +447,25 @@ plot_ddtnet_dep <- function(in_ddtnet_dep_stats) {
   ))
 }
 
+#-------------------------- format fish data -----------------------------------
+# in_fish_data_tablelist = tar_read(fish_data_tablelist)
+# in_fish_stations_bvinters = tar_read(fish_stations_bvinters)
+# format_fish_data <- function(in_fish_data_tablelist,
+#                              in_fish_stations_bvinters
+# ) {
+#   operations_ipr <- fread(in_fish_data_tablelist[[1]])
+#   operations <- fread(in_fish_data_tablelist[[2]])
+#   pop <- fread(in_fish_data_tablelist[[3]])
+#   
+#   fish_data_merged <- merge(
+#     in_fish_stations_bvinters, pop, by.x='sta_id', by.y='pop_sta_id',
+#     all.x=T, all.y=F) #%>%
+#     
+#     
+#   check <- merge(pop, operations, by.x='pop_id', by.y='ope_pop_id', all.x=T, all.y=F) %>%
+#     merge(operations_ipr, by.x='ope_id', by.y='opi_ope_id', all.x=T, all.y=F)
+#   
+# }
 #-------------------------- format amber ---------------------------------------
 #in_amber_bvinters <- tar_read(amber_bvinters)
 format_amber <- function(in_amber_bvinters,
@@ -827,74 +846,178 @@ compile_all_env <- function(in_bvdep_inters,
 }
 
 ############################ Evaluate coverage of point-based monitoring networks #######
-in_onde_ddtnets_spjoin <- tar_read(onde_ddtnets_spjoin)
+#-------------------------- evaluate_onde_coverage -----------------------------
+#in_onde_ddtnets_spjoin <- tar_read(onde_ddtnets_spjoin)
+#in_onde_stations_bvinters <- tar_read(onde_stations_bvinters)
+#in_ddtnets_path <- tar_read(ddtnets_path)
+
 evaluate_onde_coverage <- function(in_onde_ddtnets_spjoin,
-                                   in_ddtnets) {
-
-  #Exclude Charente-Maritimes
-  #check which type_stand are associated with those removed because they didn't exist and those because of nce
-  #to count them, make sure to remove duplicate geometries; check names
+                                   in_onde_stations_bvinters,
+                                   in_ddtnets_path) {
   
-  #Manual checking ONDE sites that are on a BD Topo or BD carthage segment but not on a DDT segment by looking at all those
-  #beyong 30 m from a DDT segment
-  #CdSiteHydro: M1060001, M1050001, F4620002, P1130001, P3110001, P1560002, P3322511, P3800001, P3800002, P1560002
-  #Manual checking ONDE sites whose closest site is a non-watercourse:
-  #B5130001, Y4306511, V7300001, X3500011, X3500012, H0220001, K4320001
+  ddtnet <- vect(
+    x = dirname(in_ddtnets_path),
+    layer = basename(in_ddtnets_path),
+    what = 'attributes'
+  ) 
+  
+  onde_ddtnets_join <- merge(in_onde_stations_bvinters,
+                             in_onde_ddtnets_spjoin,
+                             by='CdSiteHydro',
+                             all.x=F, all.y=T) %>%
+    merge(ddtnet,
+          by='UID_CE',
+          all.x=T) %>%
+    unique(by=c('CoordXSiteHydro', 'CoordYSiteHydro'))
+
+  onde_deleted_segments <- onde_ddtnets_join[
+    CdSiteHydro  %in% 
+      c('M1060001', 'M1050001', 'F4620002', 'P1130001', 'P3110001', 'P1560002',
+        'P3322511', 'P3800001', 'P3800002', 'P1560002')
+  ]
+  
+  onde_nce_segments <- onde_ddtnets_join[
+    CdSiteHydro  %in% 
+      c('B5130001', 'Y4306511', 'V7300001', 'X3500011', 'X3500012', 'H0220001',
+        'K4320001')
+  ]
+  
+  return(list(
+    attris_ddtnets = onde_ddtnets_join,
+    deleted_segments = onde_deleted_segments,
+    nce_segments = onde_nce_segments
+  ))
 }
 
-#in_fish_ddtnets_spjoin <- tar_read(fish_ddtnets_spjoin)
-evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin) {
-  #Check whether those had fauna
-  #Exclude Charente-Maritimes
-  #check which type_stand are associated with those removed because they didn't exist and those because of nce
-  #to count them, make sure to remove duplicate geometries; check names
+
+#-------------------------- evaluate fish stations coverage -----------------------------
+# in_fish_ddtnets_spjoin <- tar_read(fish_ddtnets_spjoin)
+# in_fish_pop_bvinters <- tar_read(fish_pop_bvinters)
+# in_fish_data_tablelist <- tar_read(fish_data_tablelist)
+# in_ddtnets_path <- tar_read(ddtnets_path)
+evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin,
+                                   in_fish_stations_bvinters,
+                                   in_ddtnets_path) {
   
-  #Manual checking ASPE fish stations that are on a BD Topo or BD Carthage segment but not on a DDT segment by looking at all those
-  #beyong 30 m from a DDT segment:
-  # 6545, 6554, 6578, 6541, 23751, 6574, 6553, 6560,
-  #6560, 6936, 6556, 1344, 23751, 6574,
-  # 6553, 6560, 6584, 22485, 6567, 6577,
-  # 22490, 22488, 10592, 6558, 6547, 20583,
-  # 125125, 6540, 6588, 6537, 6557, 6543,
-  # 6543, 6573, 6571, 6570, 6583, 6552,
-  # 6586, 22475, 6576, 6559, 6563, 6548,
-  # 10577, 2988250, 234, 101497, 101493,
-  # 101495, 2988253,2988255, 2988257, 2988258,
-  # 6585, 6624, 6920, 1642642, 86326, 86327,
-  # 86347, 86387, 86388, 86401,
-  # 6542, 6572, 16397, 16400, 16555,
-  # 17349, 17351, 17369,  113287,  188,
-  # 233, 23801, 23802, 23815, 42635,
-  # 1643265, 12551, 12555, 1663645,
-  # 10591, 10578, 10590,125139,6549,
-  # 6550, 6561, 6581, 6575, 6582, 8410,
-  # 5848, 6565, 6568, 6551, 6544,6538,
-  # 6562, 6569,6566,6539, 125156, 832088,
-  # 6871, 20930, 43520, 1620, 20873, 13549,
-  # 5839, 6959, 2318, 2355, 5258, 40871,
-  # 86216, 4837, 3336080, 86206 (nothing on the satellite imagery),
-  # 2358, 11915, 5880, 6921, 26319, 86846,
-  # 5720, 21844, 5858, 3336072, 86198, 2921228,
-  # 5721, 4037, 157, 10572, 23001, 26284,
-  # 2837719, 3727185, 8309, 6606, 6674,
-  # 12422, 86389, 86299, 86300, 5855, 10377,
-  # 2998456, 13689, 6555, 908, 2342, 269894,
-  # 6958, 359302, 14982, 5510, 24390, 13612,
-  # 6607, 86315, 86332, 86363, 13613, 5175,
-  # 42633, 24389, 3336081, 86993, 86887, 86888,
-  # 86889, 86890, 86891, 86892, 86893, 86903, 86904,
-  # 5847, 1875527, 16060, 3371, 5061
+  operation <- fread(in_fish_data_tablelist[[1]], encoding='Latin-1')
+  stations <- fread(in_fish_data_tablelist[[2]], encoding='Latin-1')
+  operation_ipr <- fread(in_fish_data_tablelist[[3]], encoding='Latin-1')
   
-  #Manual checking ASPE sites whose closest segment is a non-watercourse:
-  #42868, 3413236, 42869, 111291, 15487, 15466, 15489, 2533,111217, 3864, 3865, 670074, 2900015, 1642151, 6357, 2526
-  # 25350, 2532,26026, 1646314, 1857, 1295463, 19217, 24807, 15471, 2792, 670075, 3399701, 18520,  24670, 26811, 16100,
-  # 4927, 4932, 3062, 1266863, 47949, 15482, 25225, 86202, 86204, 86298, 17035, 17101, 17210, 15479, 15490, 2210325,
-  # 14343, 42819, 43001, 2185,2344,1858, 333, 30563, 1859, 47946, 19198, 19210, 19806, 20024, 20035, 25415, 2604, 8194,
-  # 2702, 8316, 4276
+
+  ddtnet <- vect(
+    x = dirname(in_ddtnets_path),
+    layer = basename(in_ddtnets_path),
+    what = 'attributes'
+  ) 
+  
+  fish_ddtnets_join <- merge(in_fish_stations_bvinters,
+                             in_fish_ddtnets_spjoin,
+                             by='pop_id',
+                             all.x=F, all.y=F) %>%
+    merge(ddtnet,
+          by='UID_CE',
+          all.x=T) %>%
+    unique(by=c('pop_coordonnees_x', 'pop_coordonnees_y')) %>%
+    merge(stations, by.x = 'pop_sta_id', by.y='sta_id', all.x=T) %>%
+    merge(operation, by.x='pop_id', by.y='ope_pop_id', all.x=F) %>%
+    merge(operation_ipr, by.x = 'ope_id', by.y='opi_ope_id',all.x=T)
+    
+  # word_vec <- lapply(stations$sta_libelle_sandre, function(s) {
+  #   str_split(str_to_lower(gsub('"',"", gsub("'", "", s))), pattern='[,; ]')
+  # }) %>% unlist %>% table %>% as.data.table
+  regex <- paste(c(
+    "canal", "foss[eé]", "roubine", "craste", "lac", "[eé]tang","r[ée]servoir",
+    "rade", "chenal", "ballasti[eè]re", "barrage", "d[ée]rivation", "retenue", 
+    "complexe", "gravi[eé]re", "pom.*", "secours", "prise", "bief", "aber",
+    "hydraulique"),
+    collapse='|'
+  )
+  fish_ddtnets_join_sub <- fish_ddtnets_join[
+    grep(regex, sta_libelle_sandre, ignore.case=T, invert=T),][
+      grep(regex, pop_libelle_wama, ignore.case=T, invert=T),
+    ]
+
+  #Use site name BD Topo name, Carthage, satellite imagery when unsure that a stream actually exists
+  #Only count those where a BD Topo + satellite imagery confirm potential for channel
+  #Exclude any site called fossé, roubine, craste, canal. Check at leastg 50 m
+  #Remove all those when counting too. lac, étang, réservoir, rade, ballastière, 
+ #barrage, derivation, retenue, complexe, annexe, gravieres, derivation, pompage, prise d'eau
+  #bief, 
+  
+  fish_deleted_segments <-  fish_ddtnets_join_sub[
+    pop_id  %in% 
+      c(21773, 24094, 42007, 42008, 42020, 42021, 42022, 42023, 42026, 42028,
+        47925, 47939, 59846, 59859, 59860, 59861, 95961, 95964, 95967, 102497,
+        107162, 163534, 194805, 315621, 315622, 5808312, 6350996, 6350997,
+        10033556, 3957, 3956, 104234, 66168, 108839, 102499, 95963, 21752, 35705,
+        47544, 20413, 107816, 107602, 9345, 66167,316140, 108033, 66172, 
+        9521, 208166, 9588, 66170,  66171, 9450, 9448, 11695036, 19101, 9443, 
+        9585, 9586, 3242226, 46350, 99307, 95958, 21861, 208294, 316101, 56968, 
+        75343, 21798, 11695033, 21797, 97649, 315432, 90955, 10063100, 21452,
+        17397, 16660, 804, 5833, 41982, 30981, 213018, 107227, 12818168,  24048,
+        86192, 103171, 315482, 89220, 316011, 21792,201208, 21791,424675, 92567,
+        4191, 95962, 9528, 1236235, 103172, 20985, 201860, 5729960,  106893, 24053, 
+        50235, 20139, 163530, 201858, 11695038, 316142, 13861, 6460300, 5804462,
+        95544, 19771),] 
+  fish_deleted_segments_wfish <- fish_deleted_segments[!is.na(opi_effectif),]
+  
+  
+  fish_nce_segments <- fish_ddtnets_join_sub[
+    pop_id  %in% 
+      c(63506, 66502, 56865, 11742626, 31013, 62214, 378284, 66732,
+        103992, 164095, 110357, 164219, 185534, 184735, 66731, 56878, 378433,
+        104076, 56852, 58964, 83805, 58808, 2309768, 84253, 99853, 56778, 10312,
+        2309767, 67487, 10316, 68233, 10345, 57164, 6401, 58961, 185498, 52533,
+        202827, 56870, 58061, 30451, 12506, 32867, 10339, 7795, 4458088,
+        85715, 7793, 10630, 98630, 58055, 7794, 66730, 56876, 1901, 164218,
+        4840685, 315853, 4808, 315438, 315904, 315913),]
+  fish_nce_segments_wfish <- fish_nce_segments[!is.na(opi_effectif),]
+  
+  
+  return(list(
+    attris_ddtnets_sub = fish_ddtnets_join_sub,
+    deleted_segments = fish_deleted_segments,
+    nce_segments = fish_nce_segments,
+    deleted_segments_wfish = fish_deleted_segments_wfish,
+    nce_segments_wfish = fish_nce_segments_wfish
+  ))
 }
 
-#in_hydrobio_ddtnets_spjoin <- tar_read(hydrobio_ddtnets_sp_oin)
-evaluate_hydrobio_coverage <- function(in_fish_ddtnets_spjoin) {
+# Station IDs not linked - but in the end not well linked to samples
+# c(6545, 6554, 6578, 6541, 23751, 6574, 6553, 6560, 6560, 6936, 6556, 1344, 
+#   6574, 6553, 6560, 6584, 22485, 6567, 6577, 22490, 22488, 10592, 
+#   6558, 6547, 20583, 125125, 6540, 6588, 6537, 6557, 6543, 6573, 6571, 
+#   6570, 6583, 6552, 6586, 22475, 6576, 6559, 6563, 6548, 10577, 2988250, 
+#   101497, 101493, 101495, 2988253,2988255, 2988257, 2988258, 6585, 
+#   6624, 6920, 1642642, 86326, 86327, 86347, 86387, 86388, 86401, 6542, 
+#   6572, 16397, 16400, 16555, 17349, 17351, 17369,  113287,  188,
+#   23801, 23802, 23815, 42635, 1643265, 12551, 12555, 1663645, 10591,
+#   10578, 10590,125139,6549,6550, 6561, 6581, 6575, 6582, 8410, 5848, 
+#   6565, 6568, 6551, 6544,6538, 6562, 6569,6566,6539, 125156, 832088,
+#   6871, 20930, 43520, 1620, 20873, 13549, 5839, 6959, 2318, 2355, 5258, 
+#   40871, 4837, 3336080, 2358, 11915, 5880, 6921, 26319, 
+#   86846, 5720, 21844, 5858, 3336072, 86198, 2921228, 5721, 4037, 157, 
+#   10572, 23001, 26284, 2837719, 3727185, 8309, 6606, 6674, 12422, 86389,
+#   86299, 86300, 5855, 10377, 2998456, 13689, 6555, 908, 2342, 269894,
+#   6958, 359302, 14982, 5510, 24390, 13612, 6607, 86315, 86332, 86363, 
+#   13613, 5175, 42633, 24389, 3336081, 86993, 86887, 86888, 86889, 86890, 
+#   86891, 86892, 86893, 86903, 86904, 5847, 1875527, 16060, 3371, 5061)
+# STation IDs linked to NCE
+# c(42868, 3413236, 42869, 111291, 15487, 15466, 15489, 2533,111217, 3864,
+#   3865, 670074, 2900015, 1642151, 6357, 2526, 25350, 2532,26026, 1646314, 
+#   1857, 1295463, 19217, 24807, 15471, 2792, 670075, 3399701, 18520, 24670, 
+#   26811, 16100, 4927, 4932, 3062, 1266863, 47949, 15482, 25225, 86202,
+#   86204, 86298, 17035, 17101, 17210, 15479, 15490, 2210325, 14343, 42819, 
+#   43001, 2185,2344,1858, 333, 30563, 1859, 47946, 19198, 19210, 19806, 
+#   20024, 20035, 25415, 2604, 8194, 2702, 8316, 4276)
+
+#-------------------------- evaluate hydrobio stations coverage -----------------------------
+#in_hydrobio_ddtnets_spjoin <- tar_read(hydrobio_ddtnets_sp_join)
+#in_hydrobiostations_bvinters <- tar_read(hydrobio_stations_bvinters)
+#in_ddtnets_path <- tar_read(ddtnets_path)
+evaluate_hydrobio_coverage <- function(in_hydrobio_ddtnets_spjoin,
+                                       in_hydrobio_stations_bvinters,
+                                       in_ddtnets_path) {
   #Check whether those had fauna
   #Exclude Charente-Maritimes
   #check which type_stand are associated with those removed because they didn't exist and those because of nce

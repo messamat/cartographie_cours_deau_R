@@ -9,7 +9,6 @@ tar_option_set(format = "qs")
 
 #--- Data repositories --------------------------------------------------------
 statsgdb = file.path(resdir, 'env_stats.gdb')
-list.files(resdir)
 
 ############################# Define targets plan ##############################
 list(
@@ -46,7 +45,6 @@ list(
   tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
   tar_target(comirrig_bvinters_path, file.path(resdir, "com_irrig_bvinters.csv"),format = 'file'), #commune-based irrigation
   tar_target(bdcharm_bvinters_path, file.path(resdir, "GEO050K_HARM_merge_bvinters.csv"),format = 'file'), #lithology
-  tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
   tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
   tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
   tar_target(bnpe_timeseries_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_chroniques.csv'), format = 'file'),
@@ -54,15 +52,21 @@ list(
   tar_target(bnpe_ouvrages_path, file.path(datdir, 'données_auxiliaires','bnpe', 'bnpe_ouvrages.csv'), format = 'file'),
   
   tar_target(onde_ddtnets_spjoin_path, file.path(resdir, "onde_carto_loi_eau_spjoin.csv"),format = 'file'),
-  tar_target(fish_ddtnets_spjoin_path, file.path(resdir, "fish_stations_aspe_carto_loi_eau_spjoin.csv"),format = 'file'), 
+  tar_target(onde_stations_bvinters_path, file.path(resdir, "onde_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
+  
+  tar_target(fish_ddtnets_spjoin_path, file.path(resdir, "fish_pop_aspe_carto_loi_eau_spjoin.csv"), format = 'file'), 
+  tar_target(fish_pop_bvinters_path, file.path(resdir, "fish_pop_bvinters.csv"), format = 'file'), #stations of intermittency observation
+  tar_target(fish_data_tablelist, file.path(datdir, 'données_auxiliaires', 'aspe', 'raw_data', 'raw_data', 'csv', 
+                                            c('operation.csv', 'station.csv', 'operation_ipr.csv', 'operation_ipr_plus.csv', 'point_prelevement.csv'))),
   tar_target(hydrobio_ddtnets_spjoin_path, file.path(resdir, "hydrobio_stations_naiade_carto_loi_eau_spjoin.csv"),format = 'file'),
-
+  tar_target(hydrobio_stations_bvinters_path, file.path(resdir, "hydrobio_stations_bvinters.csv"),format = 'file'), #stations of intermittency observation
+  
   #Read in DDT metadata
   tar_target(metadata_sources, read_xlsx(path = ddt_metadata_path, sheet="Sources")),
   tar_target(
     metadata_nets, 
     read_xlsx(path = ddt_metadata_path, sheet="Métadonnées_réseau_SIG",
-              col_types=c('numeric', rep('text', 4), 'numeric', rep('text', 21),
+              col_types=c('numeric', rep('text', 4), 'numeric', rep('text', 23),
                           'numeric', 'text', 'date', 'date', 'text', 'date',
                           'text', 'text'
               ))),
@@ -94,7 +98,6 @@ list(
   tar_target(bdhaies_bvinters, fread(bdhaies_bvinters_path)), #hedges
   tar_target(comirrig_bvinters, fread(comirrig_bvinters_path)), #commune-based irrigation
   tar_target(bdcharm_bvinters, fread(bdcharm_bvinters_path)), #lithology
-  tar_target(onde_stations_bvinters, fread(onde_stations_bvinters_path)), #stations of intermittency observation
   tar_target(snelder_bvinters, fread(snelder_bvinters_path)),
   tar_target(bnpe_bvinters, fread(bnpe_bvinters_path)), #withdrawals
   tar_target(bnpe_timeseries, fread(bnpe_timeseries_path)),
@@ -103,8 +106,19 @@ list(
   
   #Read in csvs of point data
   tar_target(onde_ddtnets_spjoin, fread(onde_ddtnets_spjoin_path)), 
-  tar_target(fish_ddtnets_spjoin, fread(fish_ddtnets_spjoin_path)),
+  tar_target(onde_stations_bvinters, fread(onde_stations_bvinters_path)), #stations of intermittency observation
+  
+  tar_target(fish_ddtnets_spjoin, fread(fish_ddtnets_spjoin_path, encoding='Latin-1')),
+  ##### HAVE TO REMOVE DOUBLE QUOTES FROM THIS FILE BELOW FOR IT TO BE READ######
+  tar_target(fish_pop_bvinters, fread(fish_pop_bvinters_path, encoding='Latin-1')), #stations of intermittency observation
+  # tar_target(fish_data_formatted, format_fish_data(
+  #   in_fish_data_tablelist = fish_data_tablelist,
+  #   in_fish_stations_bvinters = fish_stations_bvinters
+  #   )
+  # ),
+  
   tar_target(hydrobio_ddtnets_spjoin, fread(hydrobio_ddtnets_spjoin_path)), 
+  tar_target(hydrobio_stations_bvinters, fread(hydrobio_stations_bvinters_path)), #stations of intermittency observation
   
   #Read and merge gdb tables
   tar_target(
@@ -283,57 +297,57 @@ list(
                      in_varnames=varnames,
                      in_bvdep_inters=bvdep_inters_tab)
   )
-  ,
-  
-  tar_target(
-    envdd_plot_correlations,
-    plotmap_envdd_cors(in_envdd_multivar_analysis=envdd_multivar_analysis,
-                       in_env_dd_merged_bv=env_dd_merged_bv,
-                       in_bvdep_inters_gdb_path=bvdep_inters_gdb_path,
-                       in_ddtnets_path=ddtnets_path,
-                       in_deps_path=deps_shp_path)
-  ),
-  
-  tar_target(
-    output_plots,
-    lapply(seq(1, length(envdd_plot_correlations)), function(plot_i) {
-      ggsave(paste0("envdd_plot_correlatons", plot_i, ".png"), 
-             envdd_plot_correlations[[plot_i]],
-             width = 180, height=185, units='mm', dpi=300
-      )
-    })
-    ),
-    
-    tar_target(
-      output_plots2,
-      ggsave(paste0("envdd_dep_plots.png"), 
-             envdd_dep_plots$dd_scatter_dep,
-             width = 180, height=180, units='mm', dpi=300
-      )
-    ),
-  
-  tar_target(
-    output_plots3,
-    ggsave(paste0("ddratio_bars_dep.png"), 
-           envdd_dep_plots$ddratio_bars_dep,
-           width = 180, height=180, units='mm', dpi=300
-    )
-  ),
-  
-  tar_target(
-    output_plots4,
-    ggsave(paste0("env_lengthratio_bdtopo.png"), 
-           envdd_dep_plots$env_lengthratio_bdtopo,
-           width = 180, height=180, units='mm', dpi=300
-    )
-  ),
-  
-  tar_target(
-    output_plots5,
-    ggsave(paste0("env_ddratio_corheatmap_avg8cl.png"), 
-           envdd_multivar_analysis$env_ddratio_corheatmap_avg8cl,
-           width = 250, height=300, units='mm', dpi=300
-    )
-  )
+  #,
+  #
+  # tar_target(
+  #   envdd_plot_correlations,
+  #   plotmap_envdd_cors(in_envdd_multivar_analysis=envdd_multivar_analysis,
+  #                      in_env_dd_merged_bv=env_dd_merged_bv,
+  #                      in_bvdep_inters_gdb_path=bvdep_inters_gdb_path,
+  #                      in_ddtnets_path=ddtnets_path,
+  #                      in_deps_path=deps_shp_path)
+  # ),
+  # 
+  # tar_target(
+  #   output_plots,
+  #   lapply(seq(1, length(envdd_plot_correlations)), function(plot_i) {
+  #     ggsave(paste0("envdd_plot_correlatons", plot_i, ".png"), 
+  #            envdd_plot_correlations[[plot_i]],
+  #            width = 180, height=185, units='mm', dpi=300
+  #     )
+  #   })
+  #   ),
+  #   
+  #   tar_target(
+  #     output_plots2,
+  #     ggsave(paste0("envdd_dep_plots.png"), 
+  #            envdd_dep_plots$dd_scatter_dep,
+  #            width = 180, height=180, units='mm', dpi=300
+  #     )
+  #   ),
+  # 
+  # tar_target(
+  #   output_plots3,
+  #   ggsave(paste0("ddratio_bars_dep.png"), 
+  #          envdd_dep_plots$ddratio_bars_dep,
+  #          width = 180, height=180, units='mm', dpi=300
+  #   )
+  # ),
+  # 
+  # tar_target(
+  #   output_plots4,
+  #   ggsave(paste0("env_lengthratio_bdtopo.png"), 
+  #          envdd_dep_plots$env_lengthratio_bdtopo,
+  #          width = 180, height=180, units='mm', dpi=300
+  #   )
+  # ),
+  # 
+  # tar_target(
+  #   output_plots5,
+  #   ggsave(paste0("env_ddratio_corheatmap_avg8cl.png"), 
+  #          envdd_multivar_analysis$env_ddratio_corheatmap_avg8cl,
+  #          width = 250, height=300, units='mm', dpi=300
+  #   )
+  # )
   
 )
