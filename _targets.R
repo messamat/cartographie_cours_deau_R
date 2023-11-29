@@ -188,20 +188,21 @@ list(
   
   #Match segments in the DDT networks to those in BD TOPO or BD Carthage 
   #based on outputs from spatial intersection
-  # tar_target(
-  #   ddtnets_refids_imputed,
-  #   imput_refids_ddtnets(in_ddtnets_path = ddtnets_path,
-  #                        in_ddtnets_bdtopo_polyinters = ddtnets_bdtopo_polyinters,
-  #                        in_ddtnets_carthage_polyinters = ddtnets_carthage_polyinters)
-  #   
-  #   
-  # ),
+  tar_target(
+    ddtnets_refids_imputed,
+    impute_refids_ddtnets(in_ddtnets_path = ddtnets_path,
+                          in_ddtnets_bdtopo_polyinters = ddtnets_bdtopo_polyinters,
+                          in_ddtnets_carthage_polyinters = ddtnets_carthage_polyinters)
+    
+
+  ),
   
   tar_target(
     ddtnets_bvinters_stats,
     format_ddtnets_bvinters(in_ddtnets_bvinters = ddtnets_bvinters,
                             in_bdtopo_bvinters = bdtopo_bvinters,
-                            in_carthage_bvinters = carthage_bvinters)
+                            in_carthage_bvinters = carthage_bvinters,
+                            in_ddtnets_refids_imputed = ddtnets_refids_imputed)
   ),
   
   tar_target(

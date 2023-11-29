@@ -149,15 +149,16 @@ format_metadata_nets <- function(in_metadata_nets) {
 # in_ddtnets_bdtopo_polyinters = tar_read(ddtnets_bdtopo_polyinters)
 # in_ddtnets_carthage_polyinters = tar_read(ddtnets_carthage_polyinters)
 
-imput_refids_ddtnets <- function(in_ddtnets_path,
-                                 in_ddtnets_bdtopo_polyinters,
-                                 in_ddtnets_carthage_polyinters) {
+impute_refids_ddtnets <- function(in_ddtnets_path,
+                                  in_ddtnets_bdtopo_polyinters,
+                                  in_ddtnets_carthage_polyinters) {
   ddtnet <- vect(
     x = dirname(in_ddtnets_path),
     layer = basename(in_ddtnets_path),
     what='attributes'
   )
 
+  #--------------------------- Process match with BD topo ----------------------
   #Remove instances of multiple segments with the same pair of DDT and BD Topo segments
   in_ddtnets_bdtopo_polyinters <- in_ddtnets_bdtopo_polyinters[, list(
     length_inters_bdtopo=sum(length_inters_bdtopo)
@@ -176,23 +177,108 @@ imput_refids_ddtnets <- function(in_ddtnets_path,
       ddt_to_bdtopo_ratio = geom_Length/length_bdtopo
       )] %>%
     .[!is.infinite(inters_to_bdtopo_ratio) & !is.infinite(inters_to_ddt_ratio),] %>%#Take out records for which the intersection is a single point
-    .[,  
-      max_dev := max(sapply(.SD, function(x) {abs(1-x)})),
+    .[,  `:=`(
+      max_dev = max(sapply(.SD, function(x) {abs(1-x)})),
+      mean_dev = mean(sapply(.SD, function(x) {abs(1-x)}))
+      ),
       .SDcols = c('inters_to_bdtopo_ratio', 
                   'inters_to_ddt_ratio', 
                   'ddt_to_bdtopo_ratio'),
-      by=c('UID_CE', 'ID_bdtopo')]
+      by=c('UID_CE', 'ID_bdtopo')] %>%
+    .[, inters_diff := abs(inters_to_bdtopo_ratio - inters_to_ddt_ratio)]
    
-  ddtnet_bdtopo_nodupliddt <-  ddtnet_bdtopo[
-    order(max_dev),
-    .SD[!duplicated(UID_CE),] #Keep the BD Topo record with the highest intersect with the DDT line
-  ]
   
-  check <- ddtnet_bdtopo[max_dev < 0.15 & 
-                    is.na(id),]
+  sensitivity_analysis_bdtopo_ddtinters_2 <- lapply(
+    seq(0.02, 0.4, 0.02), function(thresh) {
+      ddtnet_bdtopo_sub <- ddtnet_bdtopo[
+        (max_dev < thresh) | ((abs(1-ddt_to_bdtopo_ratio) < thresh*0.1) & inters_diff < thresh*0.1),]
+      ddtnet_bdtopo_nodupliddt <- ddtnet_bdtopo_sub[
+        order(max_dev),
+        .SD[!duplicated(UID_CE),] #Keep the BD Topo record with the highest intersect with the DDT line
+      ]
+      
+      #Precision: number of valid matches identified divided by the total number of identified matches
+      precision <- ddtnet_bdtopo_nodupliddt[(ID_bdtopo==id) & !is.na(id), .N]/ddtnet_bdtopo_nodupliddt[!is.na(id),.N]
+      #Sensitivity: Number of valid matches identified divided by the total number of known matches
+      sensitivity <- ddtnet_bdtopo_nodupliddt[(ID_bdtopo==id) & !is.na(id), .N]/ddtnet_bdtopo[!duplicated(id), .N]
+      
+      return(data.table(
+        thresh=thresh,
+        precision=precision,
+        sensitivity=sensitivity
+      ))
+    }) %>% rbindlist
+  
+  ggplot(melt(sensitivity_analysis_bdtopo_ddtinters_2, id.vars = 'thresh'),
+              aes(x=thresh, y=value, color=variable)) +
+    geom_line()
+  
+  ddtnet_bdtopo_sub <- ddtnet_bdtopo[
+    (max_dev < 0.4) | ((abs(1-ddt_to_bdtopo_ratio) < 0.1) & inters_diff < 0.1),] %>%
+    .[order(max_dev), .SD[!duplicated(UID_CE)]]
 
-  ddtnet_bdtopo_nodupliddt[UID_CE==855158,]
+  ddtnet_bdtopo_edit <- merge(ddtnet, 
+                             ddtnet_bdtopo_sub[, .(UID_CE, ID_bdtopo)],
+                             by='UID_CE', all.x=T) %>%
+    as.data.table %>%
+    .[, ID_bdtopo_merge := id]
   
+  ddtnet_bdtopo_edit[is.na(id) & !is.na(ID_bdtopo),.N] #Added ~700k records
+  ddtnet_bdtopo_edit[is.na(id) & !is.na(ID_bdtopo),
+                    ID_bdtopo_merge := ID_bdtopo] 
+  ddtnet_bdtopo_edit[
+    ,.SD[!is.na(ID_bdtopo_merge) | !is.na(code_hydro), sum(geom_Length)]/
+      sum(geom_Length)]
+  
+  
+  others <- ddtnet_bdtopo_edit[is.na(ID_bdtopo_merge) & is.na(code_hydro),]
+  
+  #--------------------------- Process match with BD Carthage ------------------
+    #Remove instances of multiple segments with the same pair of DDT and BD Topo segments
+  in_ddtnets_carthage_polyinters <- in_ddtnets_carthage_polyinters[, list(
+    length_inters_carthage=sum(length_inters_carthage)
+  ), by=c('UID_CE', 'ID_carthage', 'length_carthage')]
+  
+  ddtnet_carthage <- merge(in_ddtnets_carthage_polyinters,
+                         ddtnet,
+                         by.x='UID_CE',
+                         by.y='UID_CE',
+                         all.x=T
+                         ) %>%
+    .[
+      , `:=`(
+      inters_to_carthage_ratio = length_inters_carthage/length_carthage,
+      inters_to_ddt_ratio =length_inters_carthage/geom_Length,
+      ddt_to_carthage_ratio = geom_Length/length_carthage
+      )] %>%
+    .[!is.infinite(inters_to_carthage_ratio) & !is.infinite(inters_to_ddt_ratio),] %>%#Take out records for which the intersection is a single point
+    .[,  `:=`(
+      max_dev = max(sapply(.SD, function(x) {abs(1-x)})),
+      mean_dev = mean(sapply(.SD, function(x) {abs(1-x)}))
+      ),
+      .SDcols = c('inters_to_carthage_ratio', 
+                  'inters_to_ddt_ratio', 
+                  'ddt_to_carthage_ratio'),
+      by=c('UID_CE', 'ID_carthage')] %>%
+    .[, inters_diff := abs(inters_to_carthage_ratio - inters_to_ddt_ratio)]
+   
+  
+  ddtnet_carthage_sub <- ddtnet_carthage[
+    (max_dev < 0.2) | ((abs(1-ddt_to_carthage_ratio) < 0.1) & inters_diff < 0.1),] %>%
+    .[order(max_dev), .SD[!duplicated(UID_CE)]] %>%
+    .[is.na(id),]
+
+  ddtnet_carthage_edit <- merge(ddtnet, 
+                             ddtnet_carthage_sub[, .(UID_CE, ID_carthage)],
+                             by='UID_CE', all.x=T) %>%
+    as.data.table
+  
+  ddtnet_carthage_edit[is.na(id) & !is.na(ID_carthage),.N] #Added >50k records
+
+  return(list(
+    ddtnet_bdtopo_edit = ddtnet_bdtopo_edit[, .(UID_CE, ID_bdtopo_merge)],
+    ddtnet_carthage_edit = ddtnet_carthage_edit[, .(UID_CE, ID_carthage)]
+  ))
 }
 #-------------------------- format_carthage ------------------------------------
 #in_carthage_bvinters <- tar_read(carthage_bvinters)
@@ -294,9 +380,10 @@ format_bdtopo <- function(in_bdtopo_bvinters) {
 }
 
 #-------------------------- format_ddtnets_bvinters -----------------------------
-# in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
-# in_bdtopo_bvinters <- tar_read(bdtopo_bvinters)
-# in_carthage_bvinters <- tar_read(carthage_bvinters)
+in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
+in_bdtopo_bvinters <- tar_read(bdtopo_bvinters)
+in_carthage_bvinters <- tar_read(carthage_bvinters)
+in_ddtnets_refids_imputed = tar_read(ddtnets_refids_imputed)
 
 format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
                                     in_bdtopo_bvinters,
@@ -307,8 +394,8 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
   # unique(stringr::str_to_lower(in_ddtnets_bvinters$regime))
   # unique(stringr::str_to_lower(in_ddtnets_bvinterss$regime2))
   
-  #----- Format regime
-  #Get data from bd topo
+  #----- Format regime--------------------------------------
+  #Get data from bd topo and bd carthage
   in_ddtnets_bvinters <- merge(
     in_ddtnets_bvinters,
     in_bdtopo_bvinters[!duplicated(ID), .(ID, REGIME)],
