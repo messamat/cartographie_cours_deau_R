@@ -144,7 +144,7 @@ format_metadata_nets <- function(in_metadata_nets) {
   return( mdat_dt_uform)
 }
 
-#-------------------------- imput_refids_ddtnets -------------------------------
+#-------------------------- impute_refids_ddtnets -------------------------------
 # in_ddtnets_path = tar_read(ddtnets_path)
 # in_ddtnets_bdtopo_polyinters = tar_read(ddtnets_bdtopo_polyinters)
 # in_ddtnets_carthage_polyinters = tar_read(ddtnets_carthage_polyinters)
@@ -154,43 +154,44 @@ imput_refids_ddtnets <- function(in_ddtnets_path,
                                  in_ddtnets_carthage_polyinters) {
   ddtnet <- vect(
     x = dirname(in_ddtnets_path),
-    layer = basename(in_ddtnets_path)
+    layer = basename(in_ddtnets_path),
+    what='attributes'
   )
-  ddtnet_OID <- unique(geom(ddtnet)[,1])
-  ddtnet <- as.data.table(ddtnet) %>%
-    .[, OBJECTID := ddtnet_OID]
-  
-  ddtnet[OBJECTID==2146285,]
-  
-  in_ddtnets_bdtopo_polyinters[duplicated(FID_carto_loi_eau_fr),.N]
+
+  #Remove instances of multiple segments with the same pair of DDT and BD Topo segments
+  in_ddtnets_bdtopo_polyinters <- in_ddtnets_bdtopo_polyinters[, list(
+    length_inters_bdtopo=sum(length_inters_bdtopo)
+  ), by=c('UID_CE', 'ID_bdtopo', 'length_bdtopo')]
   
   ddtnet_bdtopo <- merge(in_ddtnets_bdtopo_polyinters,
                          ddtnet,
-                         by.x='FID_carto_loi_eau_fr',
-                         by.y='OBJECTID',
+                         by.x='UID_CE',
+                         by.y='UID_CE',
                          all.x=T
                          ) %>%
     .[
       , `:=`(
       inters_to_bdtopo_ratio = length_inters_bdtopo/length_bdtopo,
-      inters_to_ddt_ratio =length_inters_bdtopo/geom_Length
+      inters_to_ddt_ratio =length_inters_bdtopo/geom_Length,
+      ddt_to_bdtopo_ratio = geom_Length/length_bdtopo
       )] %>%
-    .[!is.infinite(inters_to_bdtopo_ratio) & !is.infinite(inters_to_ddt_ratio),] #Take out records for which the intersection is a single point
+    .[!is.infinite(inters_to_bdtopo_ratio) & !is.infinite(inters_to_ddt_ratio),] %>%#Take out records for which the intersection is a single point
+    .[,  
+      max_dev := max(sapply(.SD, function(x) {abs(1-x)})),
+      .SDcols = c('inters_to_bdtopo_ratio', 
+                  'inters_to_ddt_ratio', 
+                  'ddt_to_bdtopo_ratio'),
+      by=c('UID_CE', 'ID_bdtopo')]
    
-  
-  ddtnet_bdtopo
-  
   ddtnet_bdtopo_nodupliddt <-  ddtnet_bdtopo[
-    order(-inters_to_ddt_ratio, -inters_to_bdtopo_ratio),
-    .SD[!duplicated(FID_carto_loi_eau_fr),] #Keep the BD Topo record with the highest intersect with the DDT line
+    order(max_dev),
+    .SD[!duplicated(UID_CE),] #Keep the BD Topo record with the highest intersect with the DDT line
   ]
   
-  check <- ddtnet_bdtopo[inters_to_bdtopo_ratio > 0.95 & 
-                  inters_to_ddt_ratio > 0.95 & is.na(id),]
-  ddtnet_bdtopo[(inters_to_bdtopo_ratio < 0.95 | 
-                  inters_to_ddt_ratio < 0.95) & !is.na(id), .N]
-    
-  
+  check <- ddtnet_bdtopo[max_dev < 0.15 & 
+                    is.na(id),]
+
+  ddtnet_bdtopo_nodupliddt[UID_CE==855158,]
   
 }
 #-------------------------- format_carthage ------------------------------------
@@ -896,21 +897,22 @@ evaluate_onde_coverage <- function(in_onde_ddtnets_spjoin,
 # in_fish_data_tablelist <- tar_read(fish_data_tablelist)
 # in_ddtnets_path <- tar_read(ddtnets_path)
 evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin,
-                                   in_fish_stations_bvinters,
+                                   in_fish_pop_bvinters,
+                                   in_fish_data_tablelist,
                                    in_ddtnets_path) {
   
   operation <- fread(in_fish_data_tablelist[[1]], encoding='Latin-1')
   stations <- fread(in_fish_data_tablelist[[2]], encoding='Latin-1')
   operation_ipr <- fread(in_fish_data_tablelist[[3]], encoding='Latin-1')
   
-
   ddtnet <- vect(
     x = dirname(in_ddtnets_path),
     layer = basename(in_ddtnets_path),
     what = 'attributes'
   ) 
   
-  fish_ddtnets_join <- merge(in_fish_stations_bvinters,
+  #station (sta_id) -> pop (pop_id) -> operation (ope_id) -> operation_ipr (opi_id)
+  fish_ddtnets_join <- merge(in_fish_pop_bvinters,
                              in_fish_ddtnets_spjoin,
                              by='pop_id',
                              all.x=F, all.y=F) %>%
@@ -932,10 +934,10 @@ evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin,
     "hydraulique"),
     collapse='|'
   )
+  
   fish_ddtnets_join_sub <- fish_ddtnets_join[
-    grep(regex, sta_libelle_sandre, ignore.case=T, invert=T),][
-      grep(regex, pop_libelle_wama, ignore.case=T, invert=T),
-    ]
+    grep(regex, sta_libelle_sandre, ignore.case=T, invert=T),] %>%
+    .[grep(regex, pop_libelle_wama, ignore.case=T, invert=T),]
 
   #Use site name BD Topo name, Carthage, satellite imagery when unsure that a stream actually exists
   #Only count those where a BD Topo + satellite imagery confirm potential for channel
@@ -973,7 +975,6 @@ evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin,
         4840685, 315853, 4808, 315438, 315904, 315913),]
   fish_nce_segments_wfish <- fish_nce_segments[!is.na(opi_effectif),]
   
-  
   return(list(
     attris_ddtnets_sub = fish_ddtnets_join_sub,
     deleted_segments = fish_deleted_segments,
@@ -983,61 +984,65 @@ evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin,
   ))
 }
 
-# Station IDs not linked - but in the end not well linked to samples
-# c(6545, 6554, 6578, 6541, 23751, 6574, 6553, 6560, 6560, 6936, 6556, 1344, 
-#   6574, 6553, 6560, 6584, 22485, 6567, 6577, 22490, 22488, 10592, 
-#   6558, 6547, 20583, 125125, 6540, 6588, 6537, 6557, 6543, 6573, 6571, 
-#   6570, 6583, 6552, 6586, 22475, 6576, 6559, 6563, 6548, 10577, 2988250, 
-#   101497, 101493, 101495, 2988253,2988255, 2988257, 2988258, 6585, 
-#   6624, 6920, 1642642, 86326, 86327, 86347, 86387, 86388, 86401, 6542, 
-#   6572, 16397, 16400, 16555, 17349, 17351, 17369,  113287,  188,
-#   23801, 23802, 23815, 42635, 1643265, 12551, 12555, 1663645, 10591,
-#   10578, 10590,125139,6549,6550, 6561, 6581, 6575, 6582, 8410, 5848, 
-#   6565, 6568, 6551, 6544,6538, 6562, 6569,6566,6539, 125156, 832088,
-#   6871, 20930, 43520, 1620, 20873, 13549, 5839, 6959, 2318, 2355, 5258, 
-#   40871, 4837, 3336080, 2358, 11915, 5880, 6921, 26319, 
-#   86846, 5720, 21844, 5858, 3336072, 86198, 2921228, 5721, 4037, 157, 
-#   10572, 23001, 26284, 2837719, 3727185, 8309, 6606, 6674, 12422, 86389,
-#   86299, 86300, 5855, 10377, 2998456, 13689, 6555, 908, 2342, 269894,
-#   6958, 359302, 14982, 5510, 24390, 13612, 6607, 86315, 86332, 86363, 
-#   13613, 5175, 42633, 24389, 3336081, 86993, 86887, 86888, 86889, 86890, 
-#   86891, 86892, 86893, 86903, 86904, 5847, 1875527, 16060, 3371, 5061)
-# STation IDs linked to NCE
-# c(42868, 3413236, 42869, 111291, 15487, 15466, 15489, 2533,111217, 3864,
-#   3865, 670074, 2900015, 1642151, 6357, 2526, 25350, 2532,26026, 1646314, 
-#   1857, 1295463, 19217, 24807, 15471, 2792, 670075, 3399701, 18520, 24670, 
-#   26811, 16100, 4927, 4932, 3062, 1266863, 47949, 15482, 25225, 86202,
-#   86204, 86298, 17035, 17101, 17210, 15479, 15490, 2210325, 14343, 42819, 
-#   43001, 2185,2344,1858, 333, 30563, 1859, 47946, 19198, 19210, 19806, 
-#   20024, 20035, 25415, 2604, 8194, 2702, 8316, 4276)
-
 #-------------------------- evaluate hydrobio stations coverage -----------------------------
-#in_hydrobio_ddtnets_spjoin <- tar_read(hydrobio_ddtnets_sp_join)
-#in_hydrobiostations_bvinters <- tar_read(hydrobio_stations_bvinters)
-#in_ddtnets_path <- tar_read(ddtnets_path)
+#  in_hydrobio_ddtnets_spjoin <- tar_read(hydrobio_ddtnets_spjoin)
+#  in_hydrobio_stations_bvinters <- tar_read(hydrobio_stations_bvinters)
+#  in_ddtnets_path <- tar_read(ddtnets_path)
 evaluate_hydrobio_coverage <- function(in_hydrobio_ddtnets_spjoin,
                                        in_hydrobio_stations_bvinters,
                                        in_ddtnets_path) {
-  #Check whether those had fauna
-  #Exclude Charente-Maritimes
-  #check which type_stand are associated with those removed because they didn't exist and those because of nce
-  #to count them, make sure to remove duplicate geometries; check names
   
+  
+  ddtnet <- vect(
+    x = dirname(in_ddtnets_path),
+    layer = basename(in_ddtnets_path),
+    what = 'attributes'
+  ) 
+  
+  hydrobio_ddtnets_join <- merge(in_hydrobio_stations_bvinters,
+                                 in_hydrobio_ddtnets_spjoin,
+                                 by='CdStationMesureEauxSurface',
+                                 all.x=F, all.y=F) %>%
+    merge(ddtnet,
+          by='UID_CE',
+          all.x=T) %>%
+    unique(by=c('CoordXStationMesureEauxSurfa_6', 
+                'CoordYStationMesureEauxSurfa_7')) %>%
+    .[(INSEE_DEP != 76) & (CodeTypEthStationMesureEauxS_27 != 1),]  #Exclude Charente-Maritimes and standing water bodies
+
+  regex <- paste(c(
+    "canal", "foss[eé]", "roubine", "craste", "lac", "[eé]tang","r[ée]servoir",
+    "rade", "chenal", "ballasti[eè]re", "barrage", "d[ée]rivation", "retenue", 
+    "complexe", "gravi[eé]re", "pom.*", "secours", "prise", "bief", "aber",
+    "hydraulique"),
+    collapse='|'
+  )
+  
+  hydrobio_ddtnets_join_sub <- hydrobio_ddtnets_join[
+    grep(regex, LbStationMesureEauxSurface, ignore.case=T, invert=T),]
+
   #Manual checking Hydrobio fish stations that are on a BD Topo or BD Carthage segment but not on a DDT segment by looking at all those
-  #beyong 30 m from a DDT segment:
-  # 04164950, 04306005, 05068475, 02093200, 04362016, 04055825, 02118000,
-  # 02120050, 05225085, 05225090, 02120400, 03149229, 01059000, 04401016,
-  # 03269250, 03189652, 03149223, 04379004, 02042865, 02118748, 03207021,
-  # 04371012, 03035734
-  
-  #Manual checking DCE hydrobio sites whose closest segment is a non-watercourse:
-  # 01115300, 01119500, 02098396, 02098397
-  # 02098398, 02114270, 02119000, 02120100,
-  # 03006417, 03006590, 03011740, 03014470,
-  # 03020188, 03085521, 04431025, 04441014,
-  # 05111000, 05118795, 05234025, 06011900,
-  # 06011965, 06039915, 06041810, 06048420,
-  # 06580182, 06580359, 06590892, 06830132,
+  #beyong 50 m from a DDT segment + Manual checking DCE hydrobio sites whose closest segment is a non-watercourse:
+  #Excluded even channelized rivers that originally were flowing in a natural bed 
+  #(Somme, Meuse, etc.)
+  hydrobio_deleted_segments <-    hydrobio_ddtnets_join_sub[
+    CdStationMesureEauxSurface  %in% 
+      c('04164950', '04306005', '05068475', '02093200', '04362016', '05225085', 
+        '05225090', '03149229', '04401016', '03269250', '03189652', '03149223', 
+        '04379004', '02042865', '02118748', '03207021', '04371012')] #03035734 was erased by a field
+
+  hydrobio_nce_segments <-    hydrobio_ddtnets_join_sub[
+    CdStationMesureEauxSurface  %in% 
+      c('02098396', '02098397', '02098398', '03006417', '03006590', '03011740',
+        '03014470', '04431025', '05234025', '06011900', '06011965', '06048420',
+        '06590892', '06830132'
+      )] #'04441014' - bief de moulin # '06580359' erased by a field
+        
+  return(list(
+    attris_ddtnets_sub = hydrobio_ddtnets_join_sub,
+    deleted_segments = hydrobio_deleted_segments,
+    nce_segments = hydrobio_nce_segments
+  ))
 }
 
 

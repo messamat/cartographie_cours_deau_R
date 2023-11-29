@@ -111,13 +111,10 @@ list(
   tar_target(fish_ddtnets_spjoin, fread(fish_ddtnets_spjoin_path, encoding='Latin-1')),
   ##### HAVE TO REMOVE DOUBLE QUOTES FROM THIS FILE BELOW FOR IT TO BE READ######
   tar_target(fish_pop_bvinters, fread(fish_pop_bvinters_path, encoding='Latin-1')), #stations of intermittency observation
-  # tar_target(fish_data_formatted, format_fish_data(
-  #   in_fish_data_tablelist = fish_data_tablelist,
-  #   in_fish_stations_bvinters = fish_stations_bvinters
-  #   )
-  # ),
+
   
   tar_target(hydrobio_ddtnets_spjoin, fread(hydrobio_ddtnets_spjoin_path)), 
+  ##### HAVE TO REMOVE DOUBLE QUOTES FROM THIS FILE BELOW FOR IT TO BE READ######
   tar_target(hydrobio_stations_bvinters, fread(hydrobio_stations_bvinters_path)), #stations of intermittency observation
   
   #Read and merge gdb tables
@@ -234,15 +231,27 @@ list(
   ),
   
   #----------- Evaluate coverage of point-based monitoring networks ------------
-  # tar_target(
-  #   evaluate_onde_coverage(in_onde_ddtnets_spjoin=onde_ddtnets_spjoin,)
-  # ),
-  # tar_target(
-  #   evaluate_fish_coverage(in_fish_ddtnets_spjoin=fish_ddtnets_spjoin)
-  # ),
-  # tar_target(
-  #   evaluate_hydrobio_coverage(in_fish_ddtnets_spjoin=fish_ddtnets_spjoin)
-  # ),
+  tar_target(
+    onde_coverage,
+    evaluate_onde_coverage(in_onde_ddtnets_spjoin=onde_ddtnets_spjoin,
+                           in_onde_stations_bvinters=onde_stations_bvinters,
+                           in_ddtnets_path=ddtnets_path)
+  ),
+  
+  tar_target(
+    fish_coverage,
+    evaluate_fish_coverage(in_fish_ddtnets_spjoin=fish_ddtnets_spjoin,
+                           in_fish_pop_bvinters=fish_pop_bvinters,
+                           in_fish_data_tablelist=fish_data_tablelist,
+                           in_ddtnets_path=ddtnets_path)
+  ),
+  
+  tar_target(
+    hydrobio_coverage,
+    evaluate_hydrobio_coverage(in_hydrobio_ddtnets_spjoin=hydrobio_ddtnets_spjoin,
+                               in_hydrobio_stations_bvinters=hydrobio_stations_bvinters,
+                               in_ddtnets_path=ddtnets_path)
+  ),
   #------------------------------- analyze data --------------------------------
   tar_target(
     drainage_density_summary,
