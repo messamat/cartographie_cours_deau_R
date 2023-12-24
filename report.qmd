@@ -6,6 +6,7 @@ execute-dir: project
 execute:
   echo: false
   warning: false
+---fr
 ---
 
 ```{r load-data}
@@ -235,6 +236,13 @@ nce_intratio_fr <- dep_stats[!duplicated(INSEE_DEP) &
                                per_nce>0.01,
                              (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))/
                                (sum(int_length)/sum(length_ddtnets_total))]
+
+dep_stats[!duplicated(INSEE_DEP) & 
+                               per_nce_determined_regime>0.5 &
+                               per_nce>0.01,
+                             (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))]
+
+#
 int_per_fr <- dep_stats[!duplicated(INSEE_DEP) & 
                           per_nce_determined_regime>0.5 &
                           per_nce>0.01, sum(int_length)/sum(length_ddtnets_total)]

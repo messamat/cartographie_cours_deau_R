@@ -188,31 +188,31 @@ impute_refids_ddtnets <- function(in_ddtnets_path,
     .[, inters_diff := abs(inters_to_bdtopo_ratio - inters_to_ddt_ratio)]
    
   
-  sensitivity_analysis_bdtopo_ddtinters_2 <- lapply(
-    seq(0.02, 0.4, 0.02), function(thresh) {
-      ddtnet_bdtopo_sub <- ddtnet_bdtopo[
-        (max_dev < thresh) | ((abs(1-ddt_to_bdtopo_ratio) < thresh*0.1) & inters_diff < thresh*0.1),]
-      ddtnet_bdtopo_nodupliddt <- ddtnet_bdtopo_sub[
-        order(max_dev),
-        .SD[!duplicated(UID_CE),] #Keep the BD Topo record with the highest intersect with the DDT line
-      ]
-      
-      #Precision: number of valid matches identified divided by the total number of identified matches
-      precision <- ddtnet_bdtopo_nodupliddt[(ID_bdtopo==id) & !is.na(id), .N]/ddtnet_bdtopo_nodupliddt[!is.na(id),.N]
-      #Sensitivity: Number of valid matches identified divided by the total number of known matches
-      sensitivity <- ddtnet_bdtopo_nodupliddt[(ID_bdtopo==id) & !is.na(id), .N]/ddtnet_bdtopo[!duplicated(id), .N]
-      
-      return(data.table(
-        thresh=thresh,
-        precision=precision,
-        sensitivity=sensitivity
-      ))
-    }) %>% rbindlist
-  
-  ggplot(melt(sensitivity_analysis_bdtopo_ddtinters_2, id.vars = 'thresh'),
-              aes(x=thresh, y=value, color=variable)) +
-    geom_line()
-  
+  # sensitivity_analysis_bdtopo_ddtinters_2 <- lapply(
+  #   seq(0.02, 0.4, 0.02), function(thresh) {
+  #     ddtnet_bdtopo_sub <- ddtnet_bdtopo[
+  #       (max_dev < thresh) | ((abs(1-ddt_to_bdtopo_ratio) < thresh*0.1) & inters_diff < thresh*0.1),]
+  #     ddtnet_bdtopo_nodupliddt <- ddtnet_bdtopo_sub[
+  #       order(max_dev),
+  #       .SD[!duplicated(UID_CE),] #Keep the BD Topo record with the highest intersect with the DDT line
+  #     ]
+  #     
+  #     #Precision: number of valid matches identified divided by the total number of identified matches
+  #     precision <- ddtnet_bdtopo_nodupliddt[(ID_bdtopo==id) & !is.na(id), .N]/ddtnet_bdtopo_nodupliddt[!is.na(id),.N]
+  #     #Sensitivity: Number of valid matches identified divided by the total number of known matches
+  #     sensitivity <- ddtnet_bdtopo_nodupliddt[(ID_bdtopo==id) & !is.na(id), .N]/ddtnet_bdtopo[!duplicated(id), .N]
+  #     
+  #     return(data.table(
+  #       thresh=thresh,
+  #       precision=precision,
+  #       sensitivity=sensitivity
+  #     ))
+  #   }) %>% rbindlist
+  # 
+  # ggplot(melt(sensitivity_analysis_bdtopo_ddtinters_2, id.vars = 'thresh'),
+  #             aes(x=thresh, y=value, color=variable)) +
+  #   geom_line()
+  # 
   ddtnet_bdtopo_sub <- ddtnet_bdtopo[
     (max_dev < 0.4) | ((abs(1-ddt_to_bdtopo_ratio) < 0.1) & inters_diff < 0.1),] %>%
     .[order(max_dev), .SD[!duplicated(UID_CE)]]
@@ -221,10 +221,10 @@ impute_refids_ddtnets <- function(in_ddtnets_path,
                              ddtnet_bdtopo_sub[, .(UID_CE, ID_bdtopo)],
                              by='UID_CE', all.x=T) %>%
     as.data.table %>%
-    .[, ID_bdtopo_merge := id]
+    .[grep('^TRON_EAU.*', id), ID_bdtopo_merge := id]
   
   ddtnet_bdtopo_edit[is.na(id) & !is.na(ID_bdtopo),.N] #Added ~700k records
-  ddtnet_bdtopo_edit[is.na(id) & !is.na(ID_bdtopo),
+  ddtnet_bdtopo_edit[is.na(ID_bdtopo_merge) & !is.na(ID_bdtopo),
                     ID_bdtopo_merge := ID_bdtopo] 
   ddtnet_bdtopo_edit[
     ,.SD[!is.na(ID_bdtopo_merge) | !is.na(code_hydro), sum(geom_Length)]/
@@ -266,7 +266,7 @@ impute_refids_ddtnets <- function(in_ddtnets_path,
   ddtnet_carthage_sub <- ddtnet_carthage[
     (max_dev < 0.2) | ((abs(1-ddt_to_carthage_ratio) < 0.1) & inters_diff < 0.1),] %>%
     .[order(max_dev), .SD[!duplicated(UID_CE)]] %>%
-    .[is.na(id),]
+    .[grep('^TRON_EAU.*', id, invert=T),]
 
   ddtnet_carthage_edit <- merge(ddtnet, 
                              ddtnet_carthage_sub[, .(UID_CE, ID_carthage)],
@@ -380,31 +380,53 @@ format_bdtopo <- function(in_bdtopo_bvinters) {
 }
 
 #-------------------------- format_ddtnets_bvinters -----------------------------
-in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
-in_bdtopo_bvinters <- tar_read(bdtopo_bvinters)
-in_carthage_bvinters <- tar_read(carthage_bvinters)
-in_ddtnets_refids_imputed = tar_read(ddtnets_refids_imputed)
+# in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
+# in_bdtopo_bvinters <- tar_read(bdtopo_bvinters)
+# in_carthage_bvinters <- tar_read(carthage_bvinters)
+# in_ddtnets_refids_imputed = tar_read(ddtnets_refids_imputed)
 
 format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
                                     in_bdtopo_bvinters,
-                                    in_carthage_bvinters) {
+                                    in_carthage_bvinters,
+                                    in_ddtnets_refids_imputed) {
   #  names(in_ddtnets_bvinters)
   # summary(in_ddtnets_bvinters)
   # in_ddtnets_bvinters[geom_Length < 0.01, .N]
   # unique(stringr::str_to_lower(in_ddtnets_bvinters$regime))
   # unique(stringr::str_to_lower(in_ddtnets_bvinterss$regime2))
   
-  #----- Format regime--------------------------------------
-  #Get data from bd topo and bd carthage
-  in_ddtnets_bvinters <- merge(
-    in_ddtnets_bvinters,
-    in_bdtopo_bvinters[!duplicated(ID), .(ID, REGIME)],
-    by.x='id', by.y='ID', all.x=T) %>%
-    merge(in_carthage_bvinters[!duplicated(CODE_HYDRO) & CODE_HYDRO != '',
-                               .(CODE_HYDRO, ETAT)],
-          by.x='code_hydro', by.y='CODE_HYDRO', all.x=T) %>%
-    setnames(c('REGIME','ETAT'), c('regime_bdtopo', 'regime_carthage')) 
+  #----- Format regime, artif, nom from BDTOPO and Carthage --------------------
+  #Format column names
+  bdtopo_cols_to_transfer <- c('ID_bdtopo_orig', 'ARTIF_bdtopo_orig', 
+                               'NOM_bdtopo_orig', 'REGIME_bdtopo_orig')
+  names(in_bdtopo_bvinters)[
+    names(in_bdtopo_bvinters) 
+    %in% c('ID', 'ARTIF', 'NOM', 'REGIME')] =  bdtopo_cols_to_transfer
+  #Setnames doesn't work because of R/RStudio glitch
+  # setnames(in_bdtopo_bvinters, 
+  #          old=c('ID', 'ARTIF', 'NOM'), 
+  #          new=c('ID_bdtopo_orig', 'ARTIF_bdtopo_orig', 'NOM_bdtopo_orig')
+  # )
   
+  carthage_cols_to_transfer <- c('ID_BDCARTH', 'ETAT_carthage', 
+                                   'NATURE_carthage', 'TOPONYME1_carthage')
+  names(in_carthage_bvinters)[
+    names(in_carthage_bvinters) 
+    %in% c('ID_BDCARTH', 'ETAT', 'NATURE', 'TOPONYME1')] = carthage_cols_to_transfer
+  
+  ddtnets_bvinters_format <- merge(   #Merge with BD TOPO
+    in_ddtnets_bvinters, in_ddtnets_refids_imputed$ddtnet_bdtopo_edit, 
+    by='UID_CE', all.x=T) %>%
+    merge(in_bdtopo_bvinters[!duplicated(ID_bdtopo_orig),  
+                             bdtopo_cols_to_transfer, with=F],
+          by.x='ID_bdtopo_merge', by.y='ID_bdtopo_orig', all.x=T) %>%
+    merge( #Merge with Carthage
+      in_ddtnets_refids_imputed$ddtnet_carthage_edit, 
+      by='UID_CE', all.x=T) %>%
+    merge(in_carthage_bvinters[!duplicated(ID_BDCARTH),  
+                             carthage_cols_to_transfer, with=F],
+          by.x='ID_carthage', by.y='ID_BDCARTH', all.x=T)
+
   perrenial_termlist <- c(
     "permanent", "perm. natura", "plein", "pemanent", "continu", "p")      
   intermittent_termlist <- c(
@@ -414,44 +436,48 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
     "pointillï¿½?ï¿½?ï¿½?", "pointillãƒâ¯ã‚â¿ã‚â½?ãƒâ¯ã‚â¿ã‚",
     "continuitãƒâ¯ã‚â¿ã‚â½?ãƒâ¯ã‚â¿", "pointillã¯â¿â½", "i")
   
-  in_ddtnets_bvinters[, `:=`(regime = stringr::str_to_lower(regime),
+  ddtnets_bvinters_format[, `:=`(regime = stringr::str_to_lower(regime),
                              regime2 = stringr::str_to_lower(regime2)
   )]
   
-  in_ddtnets_bvinters[, regime_formatted := 
-                        fcase(regime_carthage=='Permanent', 'perennial',
-                              regime_carthage=='Intermittent', 'intermittent',
+  ddtnets_bvinters_format[, regime_formatted := 
+                        fcase(ETAT_carthage=='Permanent', 'perennial',
+                              ETAT_carthage=='Intermittent', 'intermittent',
                               default='undetermined')]
   
-  in_ddtnets_bvinters[!is.na(regime_bdtopo) &  
-                        regime_bdtopo == 'Permanent',
+  ddtnets_bvinters_format[!is.na(REGIME_bdtopo_orig) &  
+                        REGIME_bdtopo_orig == 'Permanent',
                       regime_formatted := 'perennial']
-  in_ddtnets_bvinters[!is.na(regime_bdtopo) &  
-                        regime_bdtopo =='Intermittent',
+  ddtnets_bvinters_format[!is.na(REGIME_bdtopo_orig) &  
+                        REGIME_bdtopo_orig=='Intermittent',
                       regime_formatted := 'intermittent']
-  in_ddtnets_bvinters[!is.na(regime) &  regime %in% perrenial_termlist,
+  
+  ddtnets_bvinters_format[!is.na(regime) &  regime %in% perrenial_termlist,
                       regime_formatted := 'perennial']
-  in_ddtnets_bvinters[!is.na(regime) &  regime %in% intermittent_termlist,
+  ddtnets_bvinters_format[!is.na(regime) &  regime %in% intermittent_termlist,
                       regime_formatted := 'intermittent']
-  in_ddtnets_bvinters[!is.na(regime2) &  (regime2 %in% perrenial_termlist),
+  ddtnets_bvinters_format[!is.na(regime2) &  (regime2 %in% perrenial_termlist),
                       regime_formatted := 'perennial']
-  in_ddtnets_bvinters[!is.na(regime2) &  (regime2 %in% intermittent_termlist),
+  ddtnets_bvinters_format[!is.na(regime2) &  (regime2 %in% intermittent_termlist),
                       regime_formatted := 'intermittent']
+  
+  # ddtnets_bvinters_format[regime_formatted == 'undetermined', sum(geom_Length)]/
+  #   ddtnets_bvinters_format[, sum(geom_Length)]
   
   #Remove lines from a departmental layer outside of that department
-  in_ddtnets_bvinters[, orig_dep := as.integer(str_extract(orig_layer, "[0-9]{1,2}"))]
+  ddtnets_bvinters_format[, orig_dep := as.integer(str_extract(orig_layer, "[0-9]{1,2}"))]
   
-  in_ddtnets_bvinters <- in_ddtnets_bvinters[(orig_dep == INSEE_DEP) |
+  ddtnets_bvinters_format <- ddtnets_bvinters_format[(orig_dep == INSEE_DEP) |
                                                (INSEE_DEP %in% c(92, 93 ,94)),]
   
   #For the section of the watercourse that is actually within the department
   #Re-assign "Hors département" to "Indéterminé"
-  in_ddtnets_bvinters[type_stand == "Hors département", 
+  ddtnets_bvinters_format[type_stand == "Hors département", 
                       type_stand := 'Indéterminé'] 
   #Only 88 actually labeled as "Hors département"
   
   #Summarize length of lines by attributes
-  bv_stats <- in_ddtnets_bvinters[
+  bv_stats <- ddtnets_bvinters_format[
     , list(n_lines = .N,
            length_cat_bv = sum(geom_Length)
     ),
@@ -485,6 +511,7 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
                        sum(length_per_cat_dep)], by=INSEE_DEP]
   
   return(list(
+    ddtnets_bvinters_format = ddtnets_bvinters_format,
     bv_stats=bv_stats,
     dep_stats=dep_stats)
   )
@@ -1134,6 +1161,88 @@ evaluate_hydrobio_coverage <- function(in_hydrobio_ddtnets_spjoin,
 
 
 ############################ ANALYZE DRAINAGE DENSITY ################################
+#-------------------------- assess expertise effort ----------------------------
+# in_ddtnets_bvinters = tar_read(ddtnets_bvinters)
+# in_nat_id_cats <- tar_read(nat_id_cats)
+
+evaluate_effort <- function(in_ddtnets_bvinters,
+                            in_nat_id_cats) {
+  #Remove lines from a departmental layer outside of that department
+  in_ddtnets_bvinters[, orig_dep := as.integer(str_extract(orig_layer, "[0-9]{1,2}"))]
+  
+  in_ddtnets_bvinters <- in_ddtnets_bvinters[(orig_dep == INSEE_DEP) |
+                                               (INSEE_DEP %in% c(92, 93 ,94)),]
+  
+  #Format data
+  in_ddtnets_bvinters$nat_id <- str_to_lower(as.character(in_ddtnets_bvinters$nat_id))
+  
+  in_ddtnets_bvinters[nat_id=='', nat_id := NA]
+  in_ddtnets_bvinters[nat_id2=='', nat_id2 := NA]
+  
+  #Merge with standardized categories
+  nat_id_cats_melt <- melt(in_nat_id_cats,
+                           variable.name = 'nat_id_std',
+                           value.name = 'nat_id',
+                           measure.vars=names(in_nat_id_cats)) %>%
+    .[nat_id_std=='V9', nat_id := NA] %>%
+    .[nat_id != '',]
+
+  
+  ddtnets_nat_id <- merge(in_ddtnets_bvinters, nat_id_cats_melt, 
+                          by='nat_id', all.x=T)[
+    , c('UID_BV', 'INSEE_DEP', 'nat_id', 'nat_id_std', 'geom_Length'), with=F]
+  
+  ddtnets_nat_id[str_split_i(nat_id, " ", 1)=='visite', nat_id_std := 'terrain']
+  
+  ddtnets_nat_id[is.na(nat_id_std) & !is.na(nat_id), nat_id_std := 'indéterminé']
+  
+  return(ddtnets_nat_id)
+}
+
+
+#-------------------------- evaluate missing area ------------------------------
+# in_ddtnets_stats <- tar_read(ddtnets_bvinters_stats)$bv_stats
+# in_bdtopo_stats <- tar_read(bdtopo_bvinters_stats)
+# in_bvdep_inters <- tar_read(bvdep_inters_tab)
+
+evaluate_missing_areas <- function(in_ddtnets_stats,
+                                   in_bdtopo_stats,
+                                   in_bvdep_inters) {
+  
+  ddt_bdtopo_merge <- merge(
+    in_bdtopo_stats[, list(length_bv_bdtopo = sum(length_cat_bv)),
+                    by=c('UID_BV')],
+    in_ddtnets_stats,
+    by='UID_BV', all=TRUE
+  ) %>%
+    merge(in_bvdep_inters[,.(UID_BV, POLY_AREA)], 
+          by='UID_BV')
+  
+  ddt_bdtopo_ratio <- ddt_bdtopo_merge %>%
+    .[!duplicated(UID_BV), 
+      list(lengthratio_ddt_all_to_other = total_length_bv/length_bv_bdtopo,
+           POLY_AREA,
+           length_bv_bdtopo),
+      by='UID_BV'
+    ]
+  
+  ddt_nodata_bvs <- ddt_bdtopo_ratio[is.na(lengthratio_ddt_all_to_other) |
+                                         (lengthratio_ddt_all_to_other < 0.1 &
+                                            length_bv_bdtopo > 1000) &
+                                         POLY_AREA > 5,]
+  fwrite(ddt_nodata_bvs, file.path(resdir, 'check.csv'))
+  
+  ddt_bdtopo_merge[!duplicated(UID_BV) & per_ind > 0.5, sum(POLY_AREA)]
+  
+  
+  return(list(
+    per_area_nodata = (sum(ddt_nodata_bvs$POLY_AREA)/
+                           ddt_bdtopo_ratio[POLY_AREA>5,sum(POLY_AREA)]),
+    per_area_indo50 = ddt_bdtopo_merge[!duplicated(UID_BV) & per_ind > 0.5, sum(POLY_AREA)]/
+      ddt_bdtopo_ratio[POLY_AREA>5,sum(POLY_AREA)]
+  ))
+}
+
 #-------------------------- summarize_drainage_density ---------------------------
 # 
 # in_ddtnets_stats <- tar_read(ddtnets_bvinters_stats)$bv_stats
@@ -1653,9 +1762,9 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Cluster  ---------------------------------------------------------------------
   #Compute Gower's distance based on correlation coefficients and variable weights
-  env_dd_dep_gowdist <- daisy(env_dd_dep_cormat, 
-                              metric = "gower",
-                              weights = driver_cols_dt$weight) %>%
+  env_dd_dep_gowdist <- cluster::daisy(env_dd_dep_cormat, 
+                                       metric = "gower",
+                                       weights = driver_cols_dt$weight) %>%
     as.dist
   
   #Cluster departments based on UPGMA or Ward's
@@ -1697,7 +1806,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     geom_abline() +
     annotate('text', x = 0.5, y=0.1,
              label=paste('Cophenetic correlation =', 
-                         round(cophcor_avg, 2))) +
+                         round(cophcor_ward, 2))) +
     coord_fixed(expand=F, 
                 ylim=c(0, max(dist_cophcor_dt_ward$`Cophenetic dissimilarity`)+0.05)) +
     theme_classic()
@@ -1813,6 +1922,23 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
       breaks=c(-0.8, -0.5, 0, 0.5, 0.8)) +
     theme(legend.position = c(0.8, 0.3))
   
+  #By department
+  
+  
+  var_cor_gclass_preformat <- merge(dt_sub, env_dd_dendo_avg_8cl[[1]], 
+                          by.x='NOM_DEP', by.y='ID') %>%
+    .[, c(as.character(driver_cols_dt$variable), 'gclass'), with=F] %>%
+    setnames(c(as.character(driver_cols_dt$description), 'gclass')) %>%
+    setnames(gsub("water withdrawals", "ww", names(.))) %>%
+    setnames(gsub("surface water", "sw", names(.))) %>%
+    setnames(gsub("gw", "gw", names(.)))
+  
+  var_cor_byclass <- lapply(unique(var_cor_gclass_preformat$gclass), 
+                            function(class) {
+    cor(var_cor_gclass_preformat[gclass==class,],
+        method='spearman', use="pairwise.complete.obs")
+  })
+  
   #Heatmap of correlation between drainage density ratio and variables----------
   colnames(env_dd_dep_cormat) <- 
     gsub("gw", "gw",
@@ -1867,11 +1993,13 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     theme(axis.text.y = element_text(
       colour = class_colors_ward_8cl))
   
-  
+  #Return results --------------------------------------------------------------
   return(list(
     env_dd_melt = env_dd_melt
     , env_dd_dep_cor = env_dd_dep_cor
+    , env_dd_dep_cor_avg_cl8 = env_dd_dep_cor_avg_cl8
     , excluded_deps = excluded_deps 
+    , var_cor_byclass = var_cor_byclass
     , p_cophcor_avg = p_cophcor_avg
     , p_scree_avg =p_scree_avg
     , p_cophcor_ward = p_cophcor_ward
@@ -1884,6 +2012,34 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     , env_ddratio_corheatmap_ward8cl = env_ddratio_corheatmap_ward8cl
   ))
 }
+
+
+#-------------------------- Build env-dd nlme ---------------------------------
+#in_envdd_multivar_analysis=tar_read(envdd_multivar_analysis)
+
+build_nlme_envdd <- function(in_envdd_multivar_analysis) {
+  env_dd_melt_gclass <- merge(
+    in_envdd_multivar_analysis$env_dd_melt,
+    in_envdd_multivar_analysis$env_dd_dep_cor_avg_cl8[!duplicated(INSEE_DEP),
+                                                      c('INSEE_DEP', 'gclass'),
+                                                      with=F],
+    by='INSEE_DEP') %>%
+    merge(in_envdd_multivar_analysis$env_dd_dep_cor[
+      ,c('INSEE_DEP', 'description', 'cor'), with=F],
+      by=c('INSEE_DEP', 'description')
+    )
+  
+  env_dd_melt_sub <-env_dd_melt_gclass[gclass==1,]
+  
+  var_cor_byclass
+  #Get correlation between variables by class, and choose all those
+  #with high base-cor, then remove those that are correlated to that variable, etc.
+  #Then train model
+  #check <- 
+  
+  
+}
+
 
 #-------------------------- plotmap_envdd_cors --------------------------------------
 # in_envdd_multivar_analysis = tar_read(envdd_multivar_analysis)

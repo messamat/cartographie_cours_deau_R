@@ -16,6 +16,10 @@ list(
   #Read in metadata
   tar_target(ddt_metadata_path, file.path(datdir, 'metadonnes_cartographie_cours_deau_20231106.xlsx')), #format='file'
   tar_target(ddt_nets_colnas_path, file.path(resdir, 'cartos_loi_eau_colNAs.csv'), format='file') ,
+  
+  #Reference table to standardize nat_id categories
+  tar_target(nat_id_cats_path, file.path(datdir, 'nat_id_categories_20231223.csv')),
+  
   #Path to actual river network
   tar_target(ddtnets_path, file.path(resdir, 'analysis_outputs.gdb', 'carto_loi_eau_fr')),
   #Path to departments
@@ -38,7 +42,7 @@ list(
   tar_target(bdtopo_bvinters_path, file.path(resdir, "bdtopo2015_fr_bvinters.csv"),format = 'file'), #BDTOPO
   tar_target(rht_bvinters_path, file.path(resdir, "rht_lbt93_bvinters.csv"),format = 'file'), #RHT
   tar_target(carthage_bvinters_path, file.path(resdir, "TRONCON_HYDROGRAPHIQUE_bvinters.csv"  ),format = 'file'), #Carthage
-  tar_target(ddtnets_bvinters_path, file.path(resdir, "carto_loi_eau_fr_bvinters.csv"),format = 'file'), #DDT harmonized networks
+  tar_target(ddtnets_bvinters_path, file.path(resdir, "carto_loi_eau_fr_bvinters.csv"), format = 'file'), #DDT harmonized networks
   
   tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
   tar_target(bdforet_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
@@ -72,6 +76,8 @@ list(
               ))),
   tar_target(metadata_websites, read_xlsx(path = ddt_metadata_path, sheet="Données_sites_DDT")),
   tar_target(ddt_nets_colnas, fread(ddt_nets_colnas_path)),
+  
+  tar_target(nat_id_cats, fread(nat_id_cats_path, header = T)),
   
   #"skip", "guess", "logical", "numeric", "date", "text" or "list"
   
@@ -206,6 +212,17 @@ list(
   ),
   
   tar_target(
+    ddtnets_bvinters_formatted_outtab,
+    fwrite(ddtnets_bvinters_stats$ddtnets_bvinters_format[
+      !duplicated(UID_CE),
+      c("UID_CE", "ID_bdtopo_merge", "ID_carthage",
+        "ARTIF_bdtopo_orig", "NOM_bdtopo_orig", "REGIME_bdtopo_orig", 
+        "ETAT_carthage", "NATURE_carthage", "TOPONYME1_carthage",
+        "regime_formatted"), with=F], 
+      file.path(resdir, 'carto_loi_eau_refnetsattris.csv'))
+  ),
+  
+  tar_target(
     ddtnets_dep_plots,
     plot_ddtnet_dep(ddtnets_bvinters_stats$dep_stats)
   ),
@@ -254,6 +271,19 @@ list(
                                in_ddtnets_path=ddtnets_path)
   ),
   #------------------------------- analyze data --------------------------------
+  tar_target(
+    missing_ddtdata_bvs,
+    evaluate_missing_areas(in_ddtnets_stats = ddtnets_bvinters_stats$bv_stats,
+                           in_bdtopo_stats = bdtopo_bvinters_stats,
+                           in_bvdep_inters = bvdep_inters_tab)
+  ),
+  
+  tar_target(
+    expertise_effort,
+    evaluate_effort(in_ddtnets_bvinters = ddtnets_bvinters,
+                    in_nat_id_cats = nat_id_cats)
+  ),
+  
   tar_target(
     drainage_density_summary,
     summarize_drainage_density(
