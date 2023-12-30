@@ -380,7 +380,7 @@ format_bdtopo <- function(in_bdtopo_bvinters) {
 }
 
 #-------------------------- format_ddtnets_bvinters -----------------------------
-# in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
+#in_ddtnets_bvinters <- tar_read(ddtnets_bvinters)
 # in_bdtopo_bvinters <- tar_read(bdtopo_bvinters)
 # in_carthage_bvinters <- tar_read(carthage_bvinters)
 # in_ddtnets_refids_imputed = tar_read(ddtnets_refids_imputed)
@@ -473,7 +473,7 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
   #For the section of the watercourse that is actually within the department
   #Re-assign "Hors département" to "Indéterminé"
   ddtnets_bvinters_format[type_stand == "Hors département", 
-                      type_stand := 'Indéterminé'] 
+                          type_stand := 'Indéterminé'] 
   #Only 88 actually labeled as "Hors département"
   
   #Summarize length of lines by attributes
@@ -1161,7 +1161,7 @@ evaluate_hydrobio_coverage <- function(in_hydrobio_ddtnets_spjoin,
 
 
 ############################ ANALYZE DRAINAGE DENSITY ################################
-#-------------------------- assess expertise effort ----------------------------
+# ------------------------- assess expertise effort ----------------------------
 # in_ddtnets_bvinters = tar_read(ddtnets_bvinters)
 # in_nat_id_cats <- tar_read(nat_id_cats)
 
@@ -1200,51 +1200,7 @@ evaluate_effort <- function(in_ddtnets_bvinters,
 }
 
 
-#-------------------------- evaluate missing area ------------------------------
-# in_ddtnets_stats <- tar_read(ddtnets_bvinters_stats)$bv_stats
-# in_bdtopo_stats <- tar_read(bdtopo_bvinters_stats)
-# in_bvdep_inters <- tar_read(bvdep_inters_tab)
-
-evaluate_missing_areas <- function(in_ddtnets_stats,
-                                   in_bdtopo_stats,
-                                   in_bvdep_inters) {
-  
-  ddt_bdtopo_merge <- merge(
-    in_bdtopo_stats[, list(length_bv_bdtopo = sum(length_cat_bv)),
-                    by=c('UID_BV')],
-    in_ddtnets_stats,
-    by='UID_BV', all=TRUE
-  ) %>%
-    merge(in_bvdep_inters[,.(UID_BV, POLY_AREA)], 
-          by='UID_BV')
-  
-  ddt_bdtopo_ratio <- ddt_bdtopo_merge %>%
-    .[!duplicated(UID_BV), 
-      list(lengthratio_ddt_all_to_other = total_length_bv/length_bv_bdtopo,
-           POLY_AREA,
-           length_bv_bdtopo),
-      by='UID_BV'
-    ]
-  
-  ddt_nodata_bvs <- ddt_bdtopo_ratio[is.na(lengthratio_ddt_all_to_other) |
-                                         (lengthratio_ddt_all_to_other < 0.1 &
-                                            length_bv_bdtopo > 1000) &
-                                         POLY_AREA > 5,]
-  fwrite(ddt_nodata_bvs, file.path(resdir, 'check.csv'))
-  
-  ddt_bdtopo_merge[!duplicated(UID_BV) & per_ind > 0.5, sum(POLY_AREA)]
-  
-  
-  return(list(
-    per_area_nodata = (sum(ddt_nodata_bvs$POLY_AREA)/
-                           ddt_bdtopo_ratio[POLY_AREA>5,sum(POLY_AREA)]),
-    per_area_indo50 = ddt_bdtopo_merge[!duplicated(UID_BV) & per_ind > 0.5, sum(POLY_AREA)]/
-      ddt_bdtopo_ratio[POLY_AREA>5,sum(POLY_AREA)]
-  ))
-}
-
 #-------------------------- summarize_drainage_density ---------------------------
-# 
 # in_ddtnets_stats <- tar_read(ddtnets_bvinters_stats)$bv_stats
 # in_carthage_stats <- tar_read(carthage_bvinters_stats)
 # in_bcae_stats <- tar_read(bcae_bvinters_stats)
@@ -1261,6 +1217,7 @@ evaluate_missing_areas <- function(in_ddtnets_stats,
 summarize_drainage_density <- function(in_ddtnets_stats, 
                                        in_othernets_statlist, 
                                        in_bvdep_inters, 
+                                       manual_edit_missing_bvs=TRUE,
                                        outdir) {
   #in_dt_list <- c(as.list(environment()))
   
@@ -1268,6 +1225,7 @@ summarize_drainage_density <- function(in_ddtnets_stats,
   
   
   #Compute statistics for BV level (catchment) ----------------------------------
+  
   #Compute the length of non-perennial segments classified as non-watercourse
   #and the ratio between the share of non-perennial segments classified as non-watercourse
   #to the share of non-perennial segments in the BV (to control for differences 
@@ -1330,7 +1288,22 @@ summarize_drainage_density <- function(in_ddtnets_stats,
     .[, variable := factor(variable,
                            levels=c('bdtopo', 'carthage', 'bcae', 'rht'))]
   
+  #Evaluate missing areas based on bdtopo----------------------------------
+  nodata_bvs <- nets_stats_melt[variable=='bdtopo' & (
+    (is.na(total_length_bv_ddtnets) | 
+       ((total_length_bv_ddtnets/value) < 0.05 & value > 1000)) &
+      bv_area > 5
+  ), c('UID_BV', 'INSEE_DEP', 'bv_area'), with=F]
   
+  if (manual_edit_missing_bvs) {
+    nodata_bvs <- rbind(
+      nodata_bvs,
+      nets_stats_melt[UID_BV %in% c(1556, 7701, 7797, 7967, 8242, 8326),
+                      c('UID_BV', 'INSEE_DEP', 'bv_area'), with=F]
+    ) %>%
+      .[INSEE_DEP %in% c(6, 8, 12, 28, 31, 35, 76, 88),]
+  }
+
   #Compute statistics for HydroBASINS level 8-----------------------------------
   nets_stats_melt_b8 <-nets_stats_melt[, list(
     length_ddtnets_ce = sum(length_bv_ce_ddtnets, na.rm=T),
@@ -1359,6 +1332,7 @@ summarize_drainage_density <- function(in_ddtnets_stats,
   
   #Compute general statistics
   nets_stats_melt_dep <-nets_stats_melt[
+    
     ,
     list(
       length_ddtnets_total = sum(total_length_bv_ddtnets, na.rm=T),
@@ -1407,11 +1381,40 @@ summarize_drainage_density <- function(in_ddtnets_stats,
                                    length_bv_ind_ddtnets)/rht
   )]
   
+  #Return ---------------------------------------------------------------------
   return(list(
     nets_stats_merged_bv=nets_stats_merged_bv,
     nets_stats_melt=nets_stats_melt,
     nets_stats_melt_b8=nets_stats_melt_b8,
-    nets_stats_melt_dep=nets_stats_melt_dep
+    nets_stats_melt_dep=nets_stats_melt_dep,
+    nodata_bvs = nodata_bvs
+  ))
+}
+
+#-------------------------- evaluate missing area ------------------------------
+# in_ddtnets_stats <- tar_read(ddtnets_bvinters_stats)$bv_stats
+# in_drainage_density_summary <- tar_read(drainage_density_summary)
+# in_bvdeps_inters <- tar_read(bvdep_inters_tab)
+
+evaluate_missing_areas <- function(in_ddtnets_stats,
+                                   in_drainage_density_summary,
+                                   in_bvdep_inters) {
+  
+  nodata_bvs_attris <- merge(
+    in_drainage_density_summary$nodata_bvs, in_bvdeps_inters,
+    by='UID_BV', all.x=F)
+  
+  
+  ddtnets_stats_attris <- merge(
+    in_ddtnets_stats,
+    in_bvdeps_inters[, c('UID_BV', 'POLY_AREA'), with=F]
+  ) 
+
+  return(list(
+    per_area_nodata = (sum(nodata_bvs_attris$POLY_AREA)/
+                         in_bvdeps_inters[POLY_AREA>5,sum(POLY_AREA)]),
+    per_area_indo50 = ddtnets_stats_attris[!duplicated(UID_BV) & per_ind > 0.5, sum(POLY_AREA)]/
+      in_bvdeps_inters[POLY_AREA>5,sum(POLY_AREA)]
   ))
 }
 
@@ -1492,7 +1495,7 @@ merge_env_dd_dep <- function(in_drainage_density_summary,
 }
 
 
-#-------------------------- Summarize drainage density and deviations at the dep level ---------------------------
+#-------------------------- Plot and summarize drainage density and deviations at the dep level ---------------------------
 # in_drainage_density_summary <- tar_read(drainage_density_summary)
 # in_env_dd_merged_dep <- tar_read(env_dd_merged_dep)
 # in_bvdep_inters <- tar_read(bvdep_inters)

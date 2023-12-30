@@ -272,13 +272,6 @@ list(
   ),
   #------------------------------- analyze data --------------------------------
   tar_target(
-    missing_ddtdata_bvs,
-    evaluate_missing_areas(in_ddtnets_stats = ddtnets_bvinters_stats$bv_stats,
-                           in_bdtopo_stats = bdtopo_bvinters_stats,
-                           in_bvdep_inters = bvdep_inters_tab)
-  ),
-  
-  tar_target(
     expertise_effort,
     evaluate_effort(in_ddtnets_bvinters = ddtnets_bvinters,
                     in_nat_id_cats = nat_id_cats)
@@ -296,6 +289,20 @@ list(
       outdir = resdir,
       in_bvdep_inters = bvdep_inters_tab
     )
+  ),
+  
+  tar_target(
+    missing_ddtdata_bvs,
+    evaluate_missing_areas(in_ddtnets_stats = ddtnets_bvinters_stats$bv_stats,
+                           in_drainage_density_summary <- drainage_density_summary,
+                           in_bvdep_inters = bvdep_inters_tab
+                           )
+  ),
+  
+  tar_target(
+    missing_ddtdata_tab,
+    fwrite(drainage_density_summary$nodata_bvs, 
+           file.path(resdir, 'carto_loi_eau_missing_data_bvs.csv'))
   ),
   
   tar_target(
