@@ -300,9 +300,12 @@ list(
   ),
   
   tar_target(
-    missing_ddtdata_tab,
-    fwrite(drainage_density_summary$nodata_bvs, 
-           file.path(resdir, 'carto_loi_eau_missing_data_bvs.csv'))
+    missing_ddtdata_shp_path,
+    export_missing_bvs(in_drainage_density_summary = drainage_density_summary,
+                       in_bvdep_inters_gdb_path = bvdep_inters_gdb_path,
+                       out_shapefile = file.path(resdir, 'carto_loi_eau_missing_data_bvs.shp')
+                       ),
+    format='file'
   ),
   
   tar_target(
