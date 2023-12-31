@@ -1161,6 +1161,19 @@
       ],
       "Hash": "b8552d117e1b808b09a832f589b79035"
     },
+    "lindia": {
+      "Package": "lindia",
+      "Version": "0.10",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "MASS",
+        "R",
+        "ggplot2",
+        "gridExtra"
+      ],
+      "Hash": "387d296ee948f67ab6ce3e5def86389e"
+    },
     "lme4": {
       "Package": "lme4",
       "Version": "1.1-35.1",

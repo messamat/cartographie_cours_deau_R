@@ -1,0 +1,420 @@
+---
+title: "Report on analyzing the current state of the legal cartography of watercourses in France"
+format: docx
+editor: visual
+execute-dir: project
+execute:
+  echo: false
+  warning: false
+---
+
+```{r load-data}
+library(data.table)
+library(ggplot2)
+library(MASS)
+library(stringr)
+library(targets)
+
+tar_load(metadata_nets_formatted)
+tar_load(ddtnets_bvinters)
+tar_load(ddt_nets_colnas)
+tar_load(missing_ddtdata_bvs)
+tar_load(expertise_effort)
+
+knit_print.integer = function(x, ...) {
+  prettyNum(x, big.mark=",")
+}
+```
+
+# Metadata
+
+```{r summarize metadata}
+ddtnets_n_reported <- as.integer(sum(metadata_nets_formatted$nlines_reported))
+ddtnets_n <- ddtnets_bvinters[!duplicated(UID_CE), .N]
+ddtorig_n_online <- metadata_nets_formatted[
+  !duplicated(local_url) &
+    (data_orig %in% c('GEOIDE', 'Autre site')), 
+  .N]
+ddtorig_n_ddt <- metadata_nets_formatted[
+  !duplicated(local_url) & 
+    (data_orig %in% c('DDT', 'Données procurées à Hervé Pella par DDT')), 
+  .N]
+
+
+ddtnets_attris <- metadata_nets_formatted[!duplicated(local_url),
+                                            str_split_1(attri_names, ';'),
+                                            by='dep_code'] %>%
+  .[V1 != '',]
+ddtnets_attris_n <- ddtnets_attris[, .N, by='dep_code']
+
+#Check matching in attribute names among departments (removing spaces and caps)
+attrimatches_pairwise_avg  <- as.data.table(
+  t(combn(ddtnets_attris[, paste(dep_code, 
+                                 str_to_lower(
+                                   gsub('(^\\s)|(\\s$)', '', V1, perl=TRUE)
+                                 ), 
+                                 sep=";")],
+          2))) %>%
+  .[, c('dep_code_1' , 'attri_name_1') := tstrsplit(V1, ';')] %>%
+  .[, c('dep_code_2' , 'attri_name_2') := tstrsplit(V2, ';')] %>%
+  .[dep_code_1 != dep_code_2] %>%
+  .[, -c('V1', 'V2')] %>%
+  .[, sum(attri_name_1==attri_name_2, na.rm=T), 
+    by=c('dep_code_1', 'dep_code_2')] %>%
+  .[, mean(V1)]
+```
+
+## Generla stats
+
+There are `r length(unique(metadata_nets_formatted$local_url))` unique networks for mainland France, for a total of `r ddtnets_n_reported` individual watercourse segments. After removing invalid and duplicate geometries, there remain `r ddtnets_n` individual segments in the compiled dataset.
+
+The national objective of categorizing at least 90% of the country's river network was met, with only `r round(100*missing_ddtdata_bvs$per_area_nodata, 1)` % of the territory having no information on watercourses and `r round(100*missing_ddtdata_bvs$per_area_indo50, 1)` % exhibiting over 50% of uncategorized segments, respectively.
+
+We obtained `r ddtorig_n_online` datasets directly online and `r ddtorig_n_ddt` from requests to the DDTs.
+
+Most layers that are available online are regularly updated following yearly, or semestral meetings to integrate re-classification requests, as shown by the distribution of "revision date" provided in the online metadata associated with the layers (n=`r metadata_nets_formatted[!is.na(date_rev), .N]`/`r metadata_nets_formatted[, .N]` departments):
+
+```{r date_rev plot}
+#| out-width: 100%
+
+ggplot(metadata_nets_formatted, aes(x=as.Date(date_rev))) +
+  geom_histogram() +
+  scale_x_date(
+    name='Reported revision date',
+    date_labels=str_wrap("%m-%Y", 5), date_breaks  ="6 month",
+    expand=c(0,0)) + 
+  scale_y_continuous(
+    name='Number of departments',
+    expand=c(0,0)) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+```
+
+## Number and diversity of atttributes
+
+The attributes associated with the data were varied, with `r length(unique(ddtnets_attris$V1))` unique attribute names across all networks. On average, the networks included `r mean(ddtnets_attris_n)`attributes (min-max:`r min(ddtnets_attris_n)`-`rmax(ddtnets_attris_n`). These attributes were more or less common to the various networks. After removing formatting differences (different uses of caps and spaces), any two pair of network had`r round(attrimatches_pairwise_avg, 2)` attributes in common, on average.
+
+In its guidelines to DDT in 2015, the ONEMA proposed that a minimum set of standardized fields be used by DDTs:
+
+-   TYPE_ECOUL - Type d'écoulement: Cours d'eau, Indéterminé, Non cours d'eau, Inexistant
+
+-   NAT_IDENT - Méthode d'identification de l'écoulement: Analyse cartographique, Terrain, Décision de justice
+
+-   DATE_IDENT - Date de l'identification du type d'écoulement par les experts concernés
+
+-   ORIG_MODIF - Source de la modification, de la suppression du tronçon BD TOPO®, ou de l'ajout d'un nouveau tronçon: e.g., Levé GPS BDCarthage SCAN25 BDORTHO BDPARCELLAIRE CARTE d'étatmajor Cadastre napoléonien Atlas ancien Autre
+
+-   CODE_HYDRO - Code générique du cours d'eau (identifiant pour la codification hydrographique) A reporter depuis la BD CARTHAGE® si le tronçon correspond à un cours d'eau codifié
+
+-   AUTEUR - Service qui a effectué la modification (ex : SPE55)
+
+The following attributes are the most common in the networks:
+
+```{r attri_names plot}
+#| fig-column: page-right
+#| out-width: 100%
+
+#Check which departments have an attribute that fits with the ONEMA recommendations
+#Counting both without and with manual name standardization
+ddtnets_standardized_attris <- metadata_nets_formatted[
+  , c("dep_code", "type_stand_name","regime_name",
+      "nat_id_name", "orig_mo_name", "date_id_name"),
+  with=F] %>%
+  setnames(
+    c("type_stand_name", "regime_name", "nat_id_name","orig_mo_name", "date_id_name"),
+    c("type_ecoul", "regime", "nat_ident", "orig_modif", "date_ident")) %>%
+  melt(id.vars='dep_code') %>%
+  .[, list(
+    attri_name= str_split_1(
+      str_to_lower(gsub('(^\\s)|(\\s$)', '', value, perl=TRUE)),
+      ';')
+  ),
+  by=c('dep_code','variable')]
+
+
+onema_attris <- c('type_ecoul', 'nat_ident', 'date_ident', 'orig_modif',
+                  'code_hydro', 'auteur', 'comm')
+bdtopo_attris <- c('id_loc', 'id', 'prec_plani', 'prec_alti', 'artif', 'fictif', 
+                   'franchisst', 'nom', 'pos_sol', 'regime', 'z_ini', 'z_fin', 
+                   'prec_p_m', 'prec_a_m', 'artif_m', 'fictif_m', 'franchis_m', 
+                   'nom_m', 'pos_sol_m', 'regime_m', 'z_ini_m', 'z_fin_m')
+
+attris_all <- ddtnets_attris[, list(
+  attri_name= str_to_lower(gsub('(^\\s)|(\\s$)', '', V1, perl=TRUE))), 
+  by='dep_code'] %>%
+  merge(ddtnets_standardized_attris, 
+        by=c('attri_name', 'dep_code'), all.x=T) %>%
+  .[, is_standardized := fifelse((variable == attri_name) | is.na(variable), 
+                              'no', 'yes')] %>%
+  .[, standardized_name := variable] %>%
+  .[is.na(variable), standardized_name := attri_name] %>%
+  .[standardized_name %in% onema_attris, attri_orig := 'ONEMA'] %>%
+  .[standardized_name %in% bdtopo_attris, attri_orig := 'BDTOPO'] %>%
+  .[is.na(attri_orig), attri_orig:='Other'] %>%
+  .[, n := .N, by=c('standardized_name', 'is_standardized')] %>%
+  .[, n_total := .N, by=standardized_name]
+
+
+ggplot(attris_all[n_total>20,], aes(x=reorder(standardized_name,-n_total), 
+                              fill=attri_orig, 
+                              alpha=is_standardized)
+       ) +
+  geom_histogram(stat='count', 
+                 position = position_stack(reverse = TRUE)) +
+  scale_x_discrete(name='Attribute name') +
+  scale_y_continuous(
+    name='Number of departments',
+    limits=c(0, length(unique(ddtnets_attris$dep_code))),
+    expand=c(0,0)) +
+  scale_fill_discrete(name='Origin of the attribute') +
+  scale_alpha_discrete(name= str_wrap('After manual name standardization', 20),
+                       range = c(1, 0.6)) +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+```
+
+```{r attri_nas plot}
+#| fig-column: page-right
+#| out-width: 100%
+
+#Compute percentage of NAs in cols of all DDTs
+ddt_nets_colnas[, perc_null := 100*(n_null/nrows)]
+attris_all_colnas <- merge(ddt_nets_colnas, 
+                           attris_all[n_total>20, -c('attri_name')], 
+                           by.x=c('attri_name', 'dep_code'),
+                           by.y=c('standardized_name', 'dep_code'))
+
+ggplot(attris_all_colnas, 
+       aes(x=reorder(attri_name, -n_total), y=perc_null, fill=attri_orig)) +
+  geom_boxplot(alpha=0.75) +
+  scale_x_discrete(name='Attribute name') +
+  scale_y_continuous(
+    name='Percentage of records without a value',
+    #limits=c(0, length(unique(ddtnets_attris$dep_code))),
+    expand=c(0,0)) +
+  scale_fill_discrete(name='Origin of the attribute') +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=45, hjust=1))
+
+
+```
+
+## Number and diversity of categories within attributes
+
+Even for a given attribute, there was substantial variability. For the attribute describing the status of the hydrographic segments under water law, there are 5 possible categories: watercourse, not watercourse, undetermined, inexistant and outside of the department.
+
+```{r type_stand_cats}
+
+type_ecoul_cats <- metadata_nets_formatted[
+  , str_to_lower(gsub('(^\\s)|(\\s$)', '', 
+                      str_split_1(type_stand_cats, ';'), 
+                      perl=TRUE)
+  ),
+  by='dep_code']
+type_ecoul_cats_N <- type_ecoul_cats[, .N, by=dep_code]
+```
+
+Nonetheless, there were a total of `r length(unique(type_ecoul_cats$V1))` unique categories for this attribute across the networks (including typos), for an average of `r round(mean(type_ecoul_cats_N$N), 1)` per network. The hydrographic segments that were considered not to qualify as a watercourse were provided for `r round(100*metadata_nets_formatted[, nrow(.SD[nce_recat!="Pas de catégorie correspondante",])/.N])`% of departments.
+
+We harmonized these categories to yield a consistent national dataset.
+
+## Expertise
+
+The amount of field expertise required to follow the guidelines provided by the government (Online methods X) entailed a substantial time investment from departments, which was not equally realistic depending on each department's resources (Supplementary Table X). In one department alone, field expertise was involved in categorizing over `r max(expertise_effort[nat_id_std=='terrain', .N, by='INSEE_DEP']$N)` segments.
+
+# Drainage density
+
+```{r drainage_density_summary}
+
+tar_load(drainage_density_summary)
+
+dep_stats <- drainage_density_summary$nets_stats_melt_dep
+
+#---------------------- compute general stats - to be integrated in report ----
+#Total length, variability in drainage density at the level of departments
+total_length_fr <- dep_stats[, list(
+  total_length_fr = sum(length_others)/1000), 
+  by=variable] %>%
+  rbind(dep_stats[!duplicated(INSEE_DEP), list(
+    total_length_fr = sum(length_ddtnets_total, na.rm=T)/1000,
+    variable = 'ddtnets_all')]) %>%
+  rbind(dep_stats[!duplicated(INSEE_DEP), list(
+    total_length_fr = (sum(length_ddtnets_ce, na.rm=T) +
+                         sum(length_ddtnets_ind, na.rm=T))/1000,
+    variable = 'ddtnets_ceind')])
+
+
+
+ce_per_fr <- dep_stats[!duplicated(INSEE_DEP), weighted.mean(per_ce, length_ddtnets_total)]
+ind_per_fr <- dep_stats[!duplicated(INSEE_DEP), weighted.mean(per_ind, length_ddtnets_total)]
+nce_per_fr <- dep_stats[!duplicated(INSEE_DEP), weighted.mean(per_nce, length_ddtnets_total)]
+
+#Range in drainage density within deps
+dd_range_dep <- drainage_density_summary$nets_stats_merged_bv[bv_area>10 & bdtopo >500 & total_length_bv_ddtnets>0, max(ddt_to_bdtopo_ddratio_ceind,na.rm=T)-min(ddt_to_bdtopo_ddratio_ceind,na.rm=T), by=INSEE_DEP] 
+
+#Representativeness of intermittent rivers in declassified segments
+nce_intratio_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                               per_nce_determined_regime>0.5 &
+                               per_nce>0.01,
+                             (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))/
+                               (sum(int_length)/sum(length_ddtnets_total))]
+
+#Representativeness of intermittent rivers in declassified segments by department
+nce_intratio_dep <- dep_stats[!duplicated(INSEE_DEP) & 
+                               per_nce_determined_regime>0.5 &
+                               per_nce>0.01,
+                             (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))/
+                               (sum(int_length)/sum(length_ddtnets_tota)),
+                             by='INSEE_DEP']
+
+ggplot(nce_intratio_dep, aes(x=V1)) + geom_histogram()
+nce_intratio_dep[, .SD[V1>=1.5, .N]/.N] #Proportion of departments for which intermittent rivers are over-represented by more than 50% in NCE
+
+#Length of intermittent NCE/length of NCE
+per_int_nce_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                              per_nce_determined_regime>0.5 &
+                              per_nce>0.01,
+                            (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))]
+
+per_int_nce_dep <- dep_stats[!duplicated(INSEE_DEP) & 
+                              per_nce_determined_regime>0.5 &
+                              per_nce>0.01,
+                            (sum(nce_int_length)/sum(per_nce*length_ddtnets_total)),
+                            by='INSEE_DEP']
+ggplot(per_int_nce_dep, aes(x=V1)) + geom_histogram()
+per_int_nce_dep[, .SD[V1>=0.75, .N]/.N] #Proportion of departments for which intermittent rivers make up more than 75% of NCE
+
+
+#% of intermittent rivers in France (based on those with data)
+int_per_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                          per_nce_determined_regime>0.5 &
+                          per_nce>0.01, sum(int_length)/sum(length_ddtnets_total)]
+
+nce_int_length_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                                 per_nce_determined_regime>0.5 &
+                                 per_nce>0.01, sum(nce_int_length)/1000]
+nce_length_fr <- dep_stats[!duplicated(INSEE_DEP) & 
+                             per_nce_determined_regime>0.5 &
+                             per_nce>0.01, sum(per_nce*length_ddtnets_total)/1000]
+```
+
+## Cartographic basis
+
+DDTs were supposed to use the BD TOPO (TRONCON_COURS_EAU), v 15.1 (2015) as the primary hydrographic foundation to build their cartography following the OFB (then ONEMA) directives. Most departments followed this guideline: 60 out of the 65 departments (92%) with information on the hydrographic basis of their classification (on their website on in the watercourse map metadata) stated using BD TOPO, although not consistently v 15.1. Those that did not use BD TOPO either used IGN topographic maps at 1/25000 \[were these vectorized?\], BD Carthage or BD Carto.
+
+Further following OFB's guidelines, most DDTs complemented the hydrographic foundation from BD TOPO with additions from BD Carthage and SCAN 25. Other major national hydrographic references include the RHT, which is a topographically-derived dataset, and the BCAE, which is slated to be fused with the watercourse maps for the water law.
+
+The hydrographic dataset underlying watercourse mapping inherently influences the resulting quantity of geographic features considered to be watercourses, as evidenced by the total length of watercourses in France included in each of these major hydrographic reference datasets.
+
+`r knitr::kable(total_length_fr)`
+
+Considering that watercourse mapping was supposed to be based on the BD TOPO, we evaluated the consistency of watercourse maps from DDTs by comparing them to this reference dataset. Specifically, we quantified the difference in drainage density between the watercourse maps and BD TOPO expressed as the ratio in drainage density. For example, if a DDT map identified 7,000 km of watercourses whereas BD TOPO included 10,000 km of river segments in that same department, the ratio in drainage density would be 0.7. We focused on this drainage density ratio because 29 (31%) out of 94 departments did not provide data on line segments that were classified as non-watercourses (i.e., segments that were present in the hydrographic basis but that were considered not to qualify as watercourses).
+
+Computing a drainage density ratio also controlled for differences in absolute drainage density due to climate, topography, lithology and other major natural drivers across France. This ratio thus enabled us to focus on *deviations* beyond these determinants of drainage density.
+
+```{r  dd_dep_plots_scatter}
+#| fig-column: page-right
+#| out-width: 100%
+
+tar_load(envdd_dep_plots)
+envdd_dep_plots$dd_scatter_dep
+```
+
+We examined the department-level ratio in drainage density across departments to evaluate the consistency of watercourse mapping at the national scale (i.e., resulting from different interpretation of the classification criteria by individual DDTs). In addition, we evaluated differences in and among different sub-basins within departments to evaluate mapping consistency within departments.
+
+For both of these comparisons, we conservatively assessed the watercourse maps by assuming that segments labeled as "unclassified" by DDTs would by default be considered as watercourses. As our unit of analysis for assessing variations in drainage density ratio within departments, we used sub-basins as defined by the BD Topage dataset (i.e., bassins versants topographiques; the most recent standard used in France), which we intersected with department boundaries. On average, these sub-basins spanned `r drainage_density_summary$nets_stats_merged_bv[, round(mean(bv_area))]` km<sup>2</sup> such that a department included `r round(mean(drainage_density_summary$nets_stats_merged_bv[, .N, by=INSEE_DEP]$N))` sub-basins, on average.
+
+To investigate the potential drivers of variations in drainage density ratio within and between departments, we pre-processed a suite of datasets to characterize each sub-basin nationwide in terms of land cover and land use, climate, water use (i.e., withdrawals for irrigation and domestic use), river barriers (e.g., dams, weirs) and population density.
+
+## Drainage density at the department level
+
+### Variability in drainage density ratio
+
+The average drainage density ratio varied considerably between departments across France, both in terms of mean (drainage density ratio at the departmental level: mean± SD = `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), mean(lengthratio_ddt_ceind_to_other)]` ± `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), sd(lengthratio_ddt_ceind_to_other)]`) and range (within-department range in drainage density ratio: mean ± SD = `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), mean(V1)]`± `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), sd(V1)]`), whether BDTOPO and RHT was used for comparison (Figure 2, Figure S1, Table SX). `r dep_stats[variable=='bdtopo' & lengthratio_ddt_ceind_to_other>1.10, .N]`departments were particularly inclusive so that the department-wide drainage density exceeded that of BDTOPO by more than 10%
+
+```{r dd_dep_plots_bars}
+#| fig-column: page-right
+#| out-width: 100%
+
+envdd_dep_plots$ddratio_bars_dep
+```
+
+The darker portion of the bars show what the ratio would be if we only considered segments definitely classified as watercourses whereas the full bar (including the darker and lighter portions) indicates the ratio when considering segments classified as either watercourse or unclassified ("indéterminé").
+
+```{r bdtopo_rht_cor}
+dep_stats_cast <- dcast(dep_stats, INSEE_DEP~variable, value.var='lengthratio_ddt_ceind_to_other')
+
+ggplot(dep_stats_cast[(!(INSEE_DEP %in% c(75,92,93,94))),], aes(x=bdtopo, y=rht)) + geom_text(aes(label=INSEE_DEP)) +
+  geom_smooth(method='rlm')
+```
+
+### Correlates of drainage density ratio across departments
+
+When relating drainage density ratios to environmental variables at the department level, several patterns appear. Compared to BD Topo, the length of geographic features classified as watercourses by DDTs decreased with aridity, the number of barriers per kilometer of river, the area under irrigation and the volume of water withdrawn for irrigation per unit area (both from ground- and surface water). in other words, a greater proportion of hydrographic features are deemed not to be watercourses in departments with drier climates, more fragmented river networks and more intense levels of water withdrawals. As expected, drainage density ratio also slightly increases with the proportion of the department's area used for agriculture and the available water capacity of the soil.
+
+```{r env_lengthratio_bdtopo}
+#| fig-column: page-right
+#| out-width: 100%
+
+envdd_dep_plots$env_lengthratio_bdtopo
+```
+
+Beyond differences between departments, drainage density ratios considerably varied within departments too (excluding sub-basins with an area under 10 km2 and Ile-de-France).
+
+```{r boxplot_intradep_dd}
+#| fig-column: page-right
+#| out-width: 100%
+
+ggplot(drainage_density_summary$nets_stats_merged_bv[
+  bv_area>10 &  bdtopo>500 & total_length_bv_ddtnets>0 & 
+    !(INSEE_DEP %in% c(75, 92, 93, 94)),],
+  aes(x=factor(INSEE_DEP), y=ddt_to_bdtopo_ddratio_ceind)) +
+  geom_boxplot(aes(color=factor(INSEE_DEP))) +
+  geom_hline(yintercept=1) +
+  scale_x_discrete(name='Department number') +
+  scale_y_sqrt(name='Sub-basin drainage density ratio, compared to BD TOPO',
+               breaks=c(0,0.25,0.75,1,2,5,10)) +
+  theme(legend.position='none')
+
+```
+
+This nested variability is also visible spatially
+
+## Correlates within departments
+
+To explore why different sub-basins within a same department differed in their level fo discrepancy with BD Topo, we computed the Spearman's correlation coefficient between each environmental variable and the drainage density ratio across sub-basins for each department. This approach thus aimed to address such questions as: in Isère, were hydrographic features more likely to be classified as non-watercourses in drier areas of the department? We found that these correlations varied in strength and directions across departments. Therefore, below we show these coefficients after clustering departments based on their multivariate similarity in terms of relationships between drainage density ratio and environmental variables, For instance, Savoie and Alpes-Maritimes were grouped together as the only departments for which the drainage density ratio consistently increased with the prevalence of agricultural land uses and aridity. In the heatmap below, we only show correlation coefficients of at least 0.4.
+
+```{r envdd_multivar_analysis}
+#| fig-column: page-right
+#| out-width: 100%
+
+tar_load(envdd_multivar_analysis)
+envdd_multivar_analysis$env_ddratio_corheatmap_avg8cl
+```
+
+For each environmental variable, we then visualized the scatterplots for all relationships with a correlation coefficient of at least 0.5, and mapped the corresponding river network and environmental variable for the departments with the highest (or lowest) correlation coefficients.
+
+```{r envdd_plot_correlations}
+#| fig-column: page-right
+#| out-width: 100%
+
+tar_load(envdd_plot_correlations)
+envdd_plot_correlations[[1]]
+envdd_plot_correlations[[2]]
+```
+
+## Coverage of cartography
+
+```{r coverage_evaluation}
+tar_load(onde_coverage)
+tar_load(fish_coverage)
+tar_load(hydrobio_coverage)
+
+100*(onde_coverage$deleted_segments[, .N] + onde_coverage$nce_segments[, .N])/(onde_coverage$attris_ddtnets[, .N])
+
+100*(fish_coverage$deleted_segments[, .N] + fish_coverage$nce_segments[, .N])/(fish_coverage$attris_ddtnets[, .N])
+
+100*(hydrobio_coverage$deleted_segments[, .N] + hydrobio_coverage$nce_segments[, .N])/(hydrobio_coverage$attris_ddtnets[, .N])
+```
+
+Although
