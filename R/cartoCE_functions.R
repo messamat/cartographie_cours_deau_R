@@ -1514,7 +1514,7 @@ merge_env_dd_dep <- function(in_drainage_density_summary,
 }
 
 
-#-------------------------- Plot and summarize drainage density and deviations at the dep level ---------------------------
+#-------------------------- plot and summarize drainage density and deviations at the dep level ---------------------------
 # in_drainage_density_summary <- tar_read(drainage_density_summary)
 # in_env_dd_merged_dep <- tar_read(env_dd_merged_dep)
 # in_bvdep_inters <- tar_read(bvdep_inters)
@@ -1693,7 +1693,7 @@ plot_envdd_dep <- function(in_drainage_density_summary,
   ))
 }
 
-#-------------------------- Multivariate analysis env-dd for bvs across departments --------
+#-------------------------- multivariate analysis env-dd for bvs across departments --------
 # in_env_dd_merged_bv <- tar_read(env_dd_merged_bv)
 # in_varnames <- tar_read(varnames)
 # in_bvdep_inters <- tar_read(bvdep_inters)
@@ -2034,7 +2034,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
 }
 
 
-#-------------------------- Build env-dd models ---------------------------------
+#-------------------------- build env-dd models ---------------------------------
 # in_envdd_multivar_analysis=tar_read(envdd_multivar_analysis)
 # in_drainage_density_summary=tar_read(drainage_density_summary)
 # in_bvdep_inters_gdb_path=tar_read(bvdep_inters_gdb_path)
@@ -2387,7 +2387,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
        geom_smooth(method='gam') +
        facet_wrap(~variable))
   
-  cl1_chosenmod <- list(cl1_mod3, cl1_mod3_diagnostics)
+  cl1_chosen_model <- list(cl1_mod3, cl1_mod3_diagnostics)
   #Agricultural area is more strongly correlated to drainage density ratio
   #but slope is also strongly related. Other correlated include aridity, etc.
   #These all show a spatial gradient from east to west of the department
@@ -2773,9 +2773,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl5$dat_cast$bv_area)
   summary(cl5_mod3)
 
-  mod3_diagnostics <- postprocess_model(in_mod = cl5_mod3,
+  cl5_mod3_diagnostics <- postprocess_model(in_mod = cl5_mod3,
                                         in_dat_for_mod = dat_for_mod_cl5,
-                                        spatial_analysis = T)
+                                        spatial_analysis = F)
   cl5_mod3_diagnostics$smr
   plot(cl5_mod3_diagnostics$nsp_diag)
   plot(cl5_mod3_diagnostics$resid_env_p)
@@ -3191,18 +3191,52 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   
   #Return ----------------------------------------------------------------------
   return(list(
-   cl1 = cl1_chosenmod,
-   cl2 = cl2_chosenmod,
-   cl3 = cl3_chosenmod,
-   cl4 = cl4_chosenmod,
-   cl5 = cl1_chosenmod,
-   cl6 = cl1_chosenmod,
-   cl7 = cl1_chosenmod,
-   cl8 = cl1_chosenmod,
-   cl9 = cl1_chosenmod
+   cl1 = cl1_chosen_model,
+   cl2 = cl2_chosen_model,
+   cl3 = cl3_chosen_model,
+   cl4 = cl4_chosen_model,
+   cl5 = cl5_chosen_model,
+   cl6 = cl6_chosen_model,
+   cl7 = cl7_chosen_model,
+   cl8 = cl8_chosen_model,
+   cl9 = cl9_chosen_model
   ))
 }
 
+#-------------------------- tabulate env_dd models -----------------------------
+in_mods_envdd <- tar_read(mods_envdd)
+
+tabulate_mods <- function(in_mods_envdd) {
+  
+  
+}
+
+#-------------------------- analyze vulnerable waters --------------------------
+# 
+# in_drainage_density_summary = tar_read(drainage_density_summary)
+# in_ddtnets_strahler = tar_read(ddtnets_strahler)
+# in_ddtnets_bvinters = tar_read(ddtnets_bvinters)
+# in_bdtopo_strahler = tar_read(bdtopo_strahler)
+# in_bdtopo_bvinters = tar_read(bdtopo_bvinters)
+
+analyze_vulnerable_waters <- function(in_drainage_density_summary,
+                                      in_bvdep_inters_gdb_path,
+                                      in_ddtnets_strahler,
+                                      in_bdtopo_strahler,
+                                      in_bdtopo_bvinters
+    ) {
+   names(in_bdtopo_bvinters)
+   names(in_bdtopo_strahler)
+   
+   ddtnets_dat <- merge(in_ddtnets_bvinters,
+                        in_ddtnets_strahler[, c('UID_CE', 'strahler'), with=F])
+  
+   bdtopo_dat <- merge(in_bdtopo_bvinters,
+                       in_bdtopo_strahler[, c('ID', 'strahler'), with=F],
+                       by='ID')
+   
+   
+}
 
 #-------------------------- plotmap_envdd_cors --------------------------------------
 # in_envdd_multivar_analysis = tar_read(envdd_multivar_analysis)

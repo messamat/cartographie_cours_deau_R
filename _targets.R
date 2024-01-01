@@ -44,6 +44,9 @@ list(
   tar_target(carthage_bvinters_path, file.path(resdir, "TRONCON_HYDROGRAPHIQUE_bvinters.csv"  ),format = 'file'), #Carthage
   tar_target(ddtnets_bvinters_path, file.path(resdir, "carto_loi_eau_fr_bvinters.csv"), format = 'file'), #DDT harmonized networks
   
+  tar_target(ddtnets_strahler_path, file.path(resdir, "carto_loi_eau_noartif_strahler_fr.csv"), format = 'file'),
+  tar_target(bdtopo_strahler_path, file.path(resdir, "bdtopo_noartif_strahler_fr.csv"), format = 'file'),
+  
   tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
   tar_target(bdforet_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
   tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
@@ -97,6 +100,10 @@ list(
   tar_target(rht_bvinters, fread(rht_bvinters_path)), #RHT
   tar_target(carthage_bvinters, fread(carthage_bvinters_path)), #Carthage
   tar_target(ddtnets_bvinters, fread(ddtnets_bvinters_path)), #DDT harmonized networks
+  
+  #Read in csv of strahler order of ddt nets and networks
+  tar_target(ddtnets_strahler, fread(ddtnets_strahler_path)), 
+  tar_target(bdtopo_strahler, fread(bdtopo_strahler_path)),
   
   #Read in csvs of environmental files
   tar_target(amber_bvinters, fread(amber_bvinters_path)), #barriers
@@ -352,8 +359,18 @@ list(
     mods_envdd,
     build_mods_envdd(in_envdd_multivar_analysis = envdd_multivar_analysis,
                      in_drainage_density_summary = drainage_density_summary,
-                     in_bvdep_inters_gdb_path = bvdep_inters_gdb_path) 
+                     in_bvdep_inters_gdb_path = bvdep_inters_gdb_path)
   )
+  #,
+  # tar_target(
+  #   vulnerable_waters_analysis,
+  #   analyze_vulnerable_waters(
+  #     in_drainage_density_summary = drainage_density_summary,
+  #     in_bvdep_inters_gdb_path = bvdep_inters_gdb_path,
+  #     in_ddtnets_strahler = ddtnets_strahler,
+  #     in_bdtopo_strahler = bdtopo_strahler
+  #   )
+  # )
   #,
   #
   # tar_target(
