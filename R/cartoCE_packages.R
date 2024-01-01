@@ -1,4 +1,5 @@
 library(aspe) #renv::install("PascalIrz/aspe")
+library(car)
 library(cluster)
 library(data.table)
 library(dendextend)

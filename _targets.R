@@ -346,6 +346,13 @@ list(
     corclus_envdd_bv(in_env_dd_merged_bv=env_dd_merged_bv,
                      in_varnames=varnames,
                      in_bvdep_inters=bvdep_inters_tab)
+  ),
+  
+  tar_target(
+    mods_envdd,
+    build_mods_envdd(in_envdd_multivar_analysis = envdd_multivar_analysis,
+                     in_drainage_density_summary = drainage_density_summary,
+                     in_bvdep_inters_gdb_path = bvdep_inters_gdb_path) 
   )
   #,
   #
@@ -394,10 +401,9 @@ list(
   # 
   # tar_target(
   #   output_plots5,
-  #   ggsave(paste0("env_ddratio_corheatmap_avg8cl.png"), 
-  #          envdd_multivar_analysis$env_ddratio_corheatmap_avg8cl,
+  #   ggsave(paste0("env_ddratio_corheatmap_avg.png"),
+  #          envdd_multivar_analysis$env_ddratio_corheatmap_avg_morecl,
   #          width = 250, height=300, units='mm', dpi=300
   #   )
   # )
-  
 )

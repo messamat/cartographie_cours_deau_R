@@ -2044,7 +2044,8 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
 #Other class on spatial regression: https://chrismgentry.github.io/Spatial-Regression/
 
 build_mods_envdd <- function(in_envdd_multivar_analysis,
-                             in_drainage_density_summary) {
+                             in_drainage_density_summary,
+                             in_bvdep_inters_gdb_path) {
   
   #Merge all input non-spatial data
   env_dd_melt_gclass <- merge(
@@ -2093,6 +2094,18 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                             by='UID_BV',
                             all.x=F)
     
+    #Transform irrigation variables
+    ww_cols = grep("vww_mk_syr", names(env_dd_cast_sub), value=T)
+    ww_cols_log = paste0(ww_cols, '_log')
+    env_dd_cast_sub[, (ww_cols_log) := sapply(.SD, function(x) log10(x+10),
+                                               simplify=F), 
+                    .SDcols = ww_cols]
+    env_dd_cast_sub[, (ww_cols) := NULL]
+    
+    env_dd_melt_sub <- melt(env_dd_cast_sub, id.vars = id_vars) %>%
+      merge(in_dt_melt[gclass==in_gclass, c('UID_BV', 'cor', 'variable')],
+            by=c('UID_BV', 'variable'))
+    
     #Get correlation among predictor variables for the class
     var_cor_sub <- in_envdd_multivar_analysis$var_cor_byclass[[as.character(in_gclass)]]
     
@@ -2107,13 +2120,21 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     p <- ggplot(env_dd_melt_sub,
                 aes(x=value,
                     y=ddt_to_bdtopo_ddratio_ceind)) +
-      geom_point(aes(size=bv_area, 
-                     color=factor(INSEE_DEP))) +
-      # geom_smooth(#aes(weight=bv_area),
-      #   method='gam',
-      #   #family='lognormal',
-      #   formula = y ~ s(x, bs = "cs", fx = TRUE, k =3),
-      #   color='black') +
+      geom_point(aes(size=bv_area,
+                     color=factor(INSEE_DEP)),
+                 alpha=1/3) +
+      geom_smooth(aes(weight=bv_area,
+                      color=factor(INSEE_DEP)),
+        method='gam',
+        #family='lognormal',
+        formula = y ~ s(x, bs = "cs", fx = TRUE, k =3),
+        se=F)+
+      geom_smooth(aes(weight=bv_area),
+                  method='gam',
+                  #family='lognormal',
+                  formula = y ~ s(x, bs = "cs", fx = TRUE, k =3),
+                  se=F,
+                  color='black')+
       scale_x_continuous(name=unique(env_dd_melt_sub$description)) +
       scale_y_continuous(name='Ratio of drainage density:
                          length(watercourses + unclassified)/length(BD TOPO)') +
@@ -2128,7 +2149,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                                  max(env_dd_melt_sub$ddt_to_bdtopo_ddratio_ceind)+0.1)
       ), 
       expand=FALSE) +
-      facet_wrap(~description+paste('rho =', round(cor,2)), 
+      facet_wrap(~variable,  #+paste('rho =', round(cor,2)
                  scales='free_x') +
       theme_classic() +
       theme(panel.grid.minor=element_blank(),
@@ -2149,90 +2170,142 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     ))
   }
   
-  # in_mod <- cl1_mod1
-  # in_dat <- dat_for_mod$dat_cast
-  # in_dat_sp <- dat_for_mod$dat_sp
-  postprocess_model <- function(in_mod, in_dat, in_dat_sp)  {
+  # in_mod <- cl9_mod4
+  # in_dat_for_mod <- dat_for_mod_cl9
+  # plot_nbs=T
+  # removed_index=NULL
+
+  postprocess_model <- function(in_mod, in_dat_for_mod, 
+                                spatial_analysis = F,
+                                plot_nbs=F, removed_index=NULL)  {
+    
+    in_dat <- in_dat_for_mod$dat_cast
+    if (!is.null(removed_index)) {
+      in_dat <- in_dat[!removed_index,]
+    }
+    in_dat_sp <- in_dat_for_mod$dat_sp[
+      !(seq_along(in_dat_for_mod$dat_sp$UID_BV) %in% removed_index),]  
+    
+    id_vars <- in_dat_for_mod$id_vars
 
     smr <- summary(in_mod)
     #dat_copy<- copy(in_dat) 
-    
-    mod_name <- paste(names(in_mod$model)[2:length(names(in_mod$model))], collapse='_')
+    mod_name <- paste(names(in_mod$model)[2:length(names(in_mod$model))], 
+                      collapse='_') %>%
+      gsub("_[(]weights[)]", "", .)
     res_name <- paste('residuals', mod_name, sep="_")
-    
+
     #Check distributions of residuals
     nsp_diag <- gg_diagnose(in_mod)
     
     #Check correlations of other variables with residuals
     in_dat[, (res_name) := residuals(in_mod)]
     
+    #Plot residual correlations with other variables
+    resid_env_p<- ggplot(melt(in_dat, 
+                              id.vars=c(id_vars, 
+                                        res_name)),
+           aes(x=value, y=get(res_name))) +
+      geom_point(aes(color=factor(INSEE_DEP),
+                     size=bv_area), alpha=1/3) +
+      geom_smooth(method='lm', se=F,
+                  aes(color=factor(INSEE_DEP),
+                      weight=bv_area)) +
+      geom_smooth(method='lm', color='black', se=F,
+                  aes(weight=bv_area)) +
+      facet_wrap(~variable, scales='free_x') +
+      theme_bw()
+    
     #Check spatial autocorrelation of residuals
-    resids_sp <- merge(in_dat_sp,
-                               in_dat[, c('UID_BV', res_name), with=F],
-                               by='UID_BV')
-    resids_sp_p <- ggplot(resids_sp) +
-      geom_spatvector(aes_string(fill=res_name)) +
-      scale_fill_distiller(palette='Spectral')
-    
-    #Compute k nearest neighbor list 
-    id <- resids_sp$UID_BV
-    coords <- coordinates(as(resids_sp, 'Spatial'))
-    dat_nb4 <- knn2nb(knearneigh(coords, k = 4), row.names = id)
-    plot(as(resids_sp, 'Spatial'))
-    plot(dat_nb4, coords, add=T, main = "KNN = 4 Neighborhood")
-    
-    #Assign weight to neighborhood based on idw (power 2) - globally standardized
-    wlist <- nb2listwdist(neighbours=dat_nb4, 
-                          x=as(resids_sp, 'Spatial'), type="idw", style="C", 
-                          alpha = 2, dmax = NULL, longlat = NULL, zero.policy=NULL)
-    #nb2listw(dat_nb4, style = "B", zero.policy = T)
-
-    #Run moran's test
-    moran_lm <- lm.morantest(in_mod, wlist)
-    
-    #Lagrange multiplier diagnostic tests for spatial dependence
-    #Test for error dependence (LMerr) and 
-    # test for missing spatially lagged dependent variable (LMlag)
-    LMtests <- lm.LMtests(in_mod, wlist, test = "all")
-    
-    #Run Spatial error model
-    sem <- spatialreg::errorsarlm(formula = in_mod$call$formula, 
-                                  data = in_dat,
-                                  listw = wlist, quiet = T)
-    smr_sem <- summary(sem)
-    
-    # resids_sp$fitted_sem <- sem$fitted.values
-    # spplot(resids_sp, "fitted_sem", main = "Trend")
-    # resids_sp$resid_sem <- sem$residuals
-    # spplot(resids_sp, "resid_sem", main = "Residuals")
-    
-    #Run spatial lag model
-    lagm <- spatialreg::lagsarlm(formula = in_mod$call$formula, 
-                                 data = in_dat,
-                                 listw = wlist,
-                                 zero.policy = T)
-    smr_lagm <- summary(lagm)
-    
-    # resids_sp$resid_lagm <- lagm$residuals
-    # spplot(resids_sp, "resid_lagm", main = "Residuals")
-    
-    return(list(
-      smr=smr,
-      nsp_diag=nsp_diag,
-      resids_name = res_name,
-      resids_sp = resids_sp,
-      resids_sp_p = resids_sp_p,
-      wlist = wlist,
-      moran_lm = moran_lm,
-      LMtests = LMtests,
-      sem = sem,
-      smr_sem = smr_sem,
-      lagm = lagm,
-      smr_lagm = smr_lagm
-    ))
+    if (spatial_analysis) {
+      resids_sp <- merge(in_dat_sp,
+                         in_dat[, c('UID_BV', res_name), with=F],
+                         by='UID_BV')
+      resids_sp_p <- ggplot(resids_sp) +
+        geom_spatvector(aes_string(fill=res_name)) +
+        scale_fill_distiller(palette='Spectral')
+      
+      #Compute k nearest neighbor list 
+      id <- resids_sp$UID_BV
+      coords <- coordinates(as(resids_sp, 'Spatial'))
+      dat_nb4 <- knn2nb(knearneigh(coords, k = 4), row.names = id)
+      if (plot_nbs) {
+        plot(as(resids_sp, 'Spatial'))
+        plot(dat_nb4, coords, add=T, main = "KNN = 4 Neighborhood")
+      }
+      
+      
+      #Assign weight to neighborhood based on idw (power 2) - globally standardized
+      wlist <- nb2listwdist(neighbours=dat_nb4, 
+                            x=as(resids_sp, 'Spatial'), type="idw", style="C", 
+                            alpha = 2, dmax = NULL, longlat = NULL, zero.policy=NULL)
+      #nb2listw(dat_nb4, style = "B", zero.policy = T)
+      
+      #Run moran's test
+      moran_lm <- lm.morantest(in_mod, wlist)
+      
+      #Lagrange multiplier diagnostic tests for spatial dependence
+      #Test for error dependence (LMerr) and 
+      # test for missing spatially lagged dependent variable (LMlag)
+      LMtests <- lm.LMtests(in_mod, wlist, test = "all")
+      
+      #Run Spatial error model
+      sem <- spatialreg::errorsarlm(formula = in_mod$call$formula, 
+                                    data = in_dat,
+                                    listw = wlist, quiet = T)
+      smr_sem <- summary(sem)
+      
+      # resids_sp$fitted_sem <- sem$fitted.values
+      # spplot(resids_sp, "fitted_sem", main = "Trend")
+      # resids_sp$resid_sem <- sem$residuals
+      # spplot(resids_sp, "resid_sem", main = "Residuals")
+      
+      #Run spatial lag model
+      lagm <- spatialreg::lagsarlm(formula = in_mod$call$formula, 
+                                   data = in_dat,
+                                   listw = wlist,
+                                   zero.policy = T)
+      smr_lagm <- summary(lagm)
+      
+      # resids_sp$resid_lagm <- lagm$residuals
+      # spplot(resids_sp, "resid_lagm", main = "Residuals")
+      
+      return(list(
+        smr=smr,
+        nsp_diag=nsp_diag,
+        resids_name = res_name,
+        resid_env_p = resid_env_p,
+        resids_sp = resids_sp,
+        resids_sp_p = resids_sp_p,
+        wlist = wlist,
+        moran_lm = moran_lm,
+        LMtests = LMtests,
+        sem = sem,
+        smr_sem = smr_sem,
+        lagm = lagm,
+        smr_lagm = smr_lagm
+      ))
+    } else {
+      return(list(
+        smr=smr,
+        nsp_diag=nsp_diag,
+        resids_name = res_name,
+        resid_env_p = resid_env_p,
+        resids_sp = NULL,
+        resids_sp_p = NULL,
+        wlist = NULL,
+        moran_lm = NULL,
+        LMtests = NULL,
+        sem = NULL,
+        smr_sem = NULL,
+        lagm = NULL,
+        smr_lagm = NULL
+      ))
+    }
   }
-  
-  #Class 1 model  - 73 Savoie --------------------------------------------------
+  ##
+  #Class 1 model - Savoie ------------------------------------------------------
+  print('Selecting model for class 1')
   dat_for_mod_cl1 <- get_dat_formod(
     in_dt_melt=env_dd_melt_gclass, 
     in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
@@ -2252,50 +2325,44 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   cl1_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~slo_dg_sav,
                  data=dat_for_mod_cl1$dat_cast)
   
-  mod1_diagnostics <- postprocess_model(in_mod = cl1_mod1,
-                                        in_dat = dat_for_mod_cl1$dat_cast,
-                                        in_dat_sp = dat_for_mod_cl1$dat_sp)
-  mod1_diagnostics$smr
-  mod1_diagnostics$resids_sp_p
-  mod1_diagnostics$LMtests #lag model test is significant
-  
-  #Plot other variables against residuals of non-spatial regression
-  ggplot(melt(dat_for_mod_cl1$dat_cast, id.vars=c(id_vars, 'residuals_slo_dg_sav')),
-         aes(x=value, y=residuals_slo_dg_sav)) +
-    geom_point() +
-    geom_smooth() +
-    facet_wrap(~variable, scales='free')
+  cl1_mod1_diagnostics <- postprocess_model(in_mod = cl1_mod1,
+                                            in_dat = dat_for_mod_cl1,
+                                            spatial_analysis = T)
+  cl1_mod1_diagnostics$smr
+  cl1_mod1_diagnostics$resids_sp_p
+  cl1_mod1_diagnostics$LMtests #lag model test is significant
+  plot(cl1_mod1_diagnostics$resid_env_p)
   
   #Model 2: dd ratio ~ slope + agriculture
   cl1_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind~slo_dg_sav+agr_pc_sse, 
-                 data=dat_for_mod_cl1_2$dat_cast)
+                 data=dat_for_mod_cl1$dat_cast)
   
-  mod2_diagnostics <- postprocess_model(in_mod = cl1_mod2,
-                                        in_dat = dat_for_mod_cl1$dat_cast,
-                                        in_dat_sp = dat_for_mod_cl1$dat_sp)
-  mod2_diagnostics$smr #slope is not significant, agriculture is
+  cl1_mod2_diagnostics <- postprocess_model(in_mod = cl1_mod2,
+                                            in_dat = dat_for_mod_cl1,
+                                            spatial_analysis = F)
+  cl1_mod2_diagnostics$smr #slope is not significant, agriculture is
 
   
   #Model 3: dd ratio ~ agriculture
   cl1_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind~agr_pc_sse, 
                  data=dat_for_mod_cl1$dat_cast)
 
-  mod3_diagnostics <- postprocess_model(in_mod = cl1_mod3,
-                                        in_dat = dat_for_mod_cl1$dat_cast,
-                                        in_dat_sp = dat_for_mod_cl1$dat_sp)
-  mod3_diagnostics$smr
-  mod3_diagnostics$LMtests #Both lag and error models tests are significant
-  mod3_diagnostics$smr_sem
-  mod3_diagnostics$smr_lagm
+  cl1_mod3_diagnostics <- postprocess_model(in_mod = cl1_mod3,
+                                            in_dat = dat_for_mod_cl1,
+                                            spatial_analysis = T)
+  cl1_mod3_diagnostics$smr
+  cl1_mod3_diagnostics$LMtests #Both lag and error models tests are significant
+  cl1_mod3_diagnostics$smr_sem
+  cl1_mod3_diagnostics$smr_lagm
   
   #Pseudo-R2 for lagm
-  cl1_pseudoR2 <- cor(mod3_diagnostics$lagm$y, 
-                      mod3_diagnostics$lagm$fitted.values)^2
+  cl1_mod3_pseudoR2 <- cor(cl1_mod3_diagnostics$lagm$y, 
+                           cl1_mod3_diagnostics$lagm$fitted.values)^2
   
   #Plot other variables against residuals of spatial regression
-  dat_for_mod_cl1$dat_cast$mod3_lagm_residuals <- mod3_diagnostics$lagm$residuals
-  mod3_lagm_residuals_env_p <- ggplot(
-    melt(dat_for_mod_cl1$dat_cast, id.vars=c(id_vars, 'mod3_lagm_residuals')),
+  dat_for_mod_cl1$dat_cast$mod3_lagm_residuals <- cl1_mod3_diagnostics$lagm$residuals
+  cl1_mod3_lagm_residuals_env_p <- ggplot(
+    melt(dat_for_mod_cl1$dat_cast, id.vars=c(dat_for_mod_cl1$id_vars, 'mod3_lagm_residuals')),
     aes(x=value, y=mod3_lagm_residuals)) +
     geom_point() +
     geom_smooth() +
@@ -2320,8 +2387,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
        geom_smooth(method='gam') +
        facet_wrap(~variable))
   
+  cl1_chosenmod <- list(cl1_mod3, cl1_mod3_diagnostics)
   #Agricultural area is more strongly correlated to drainage density ratio
-  #but slope is also strongly related. Other corelated include aridity, etc.
+  #but slope is also strongly related. Other correlated include aridity, etc.
   #These all show a spatial gradient from east to west of the department
   #but it isn't so much a result of a differential classification of watercourses
   #against a uniform distribution from bdtopo as much as a much higher drainage
@@ -2329,7 +2397,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   #in bdtopo — most first-order and several second-order streams were removed
   #in those areas. Probably considered mountain gullies.
  
-  #Class 2 model- 41 Loire-et-Cher ---------------------------------------------
+  #Class 2 model - Loire-et-Cher -----------------------------------------------
+  print('Selecting model for class 2')
+  
   dat_for_mod_cl2 <- get_dat_formod(
     in_dt_melt=env_dd_melt_gclass, 
     in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
@@ -2349,115 +2419,788 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   cl2_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse,
                  data=dat_for_mod_cl2$dat_cast)
   
-  mod1_diagnostics <- postprocess_model(in_mod = cl2_mod1,
-                                        in_dat = dat_for_mod_cl2$dat_cast,
-                                        in_dat_sp = dat_for_mod_cl2$dat_sp)
-  mod1_diagnostics$smr
-  plot(mod1_diagnostics$nsp_diag)
+  cl2_mod1_diagnostics <- postprocess_model(in_mod = cl2_mod1,
+                                            in_dat = dat_for_mod_cl2,
+                                            spatial_analysis = F)
+  cl2_mod1_diagnostics$smr
+  plot(cl2_mod1_diagnostics$nsp_diag)
   
   #Model 2: dd ratio ~ winter crops after removing outlier (0 ce or ind)
-  dat_for_mod_cl2$dat_cast_sub <- dat_for_mod_cl2$dat_cast[
+  dat_for_mod_cl2$dat_cast <- dat_for_mod_cl2$dat_cast[
     ddt_to_bdtopo_ddratio_ceind>0,]
-  dat_for_mod_cl2$dat_sp_sub <- dat_for_mod_cl2$dat_sp[
+  dat_for_mod_cl2$dat_sp <- dat_for_mod_cl2$dat_sp[
     dat_for_mod_cl2$dat_sp$ddt_to_bdtopo_ddratio_ceind>0,]
   
   cl2_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse,
-                 data=dat_for_mod_cl2$dat_cast_sub)
+                 data=dat_for_mod_cl2$dat_cast)
   
-  mod2_diagnostics <- postprocess_model(
-    in_mod = cl2_mod2,
-    in_dat = dat_for_mod_cl2$dat_cast_sub,
-    in_dat_sp = dat_for_mod_cl2$dat_sp_sub)
+  cl2_mod2_diagnostics <- postprocess_model(in_mod = cl2_mod2,
+                                            in_dat = dat_for_mod_cl2,
+                                            spatial_analysis = T)
   
-  mod2_diagnostics$smr
-  plot(mod2_diagnostics$nsp_diag)
-  
+  cl2_mod2_diagnostics$smr
+  plot(cl2_mod2_diagnostics$nsp_diag)
+  plot(cl2_mod2_diagnostics$resid_env_p)
   #mod2_diagnostics$resids_sp_p
-  ggplot(melt(dat_for_mod_cl2$dat_cast_sub, 
-              id.vars=c(dat_for_mod_cl2$id_vars, 
-                        mod2_diagnostics$resids_name)),
-         aes(x=value, y=get(mod2_diagnostics$resids_name))) +
-    geom_point() +
-    geom_smooth(method='gam') +
-    facet_wrap(~variable, scales='free')
 
-  mod2_diagnostics$LMtests
+  cl2_mod2_diagnostics$LMtests
   
   #Model 3: dd ratio ~ predicted intermittency after removing outlier (0 ce or ind)
   cl2_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind~irs_pc_sav,
-                 data=dat_for_mod_cl2$dat_cast_sub)
+                 data=dat_for_mod_cl2$dat_cast)
   
-  mod3_diagnostics <- postprocess_model(
-    in_mod = cl2_mod3,
-    in_dat = dat_for_mod_cl2$dat_cast_sub,
-    in_dat_sp = dat_for_mod_cl2$dat_sp_sub)
+  cl2_mod3_diagnostics <- postprocess_model(in_mod = cl2_mod3,
+                                            in_dat = dat_for_mod_cl2)
   
-  mod3_diagnostics$smr
-  plot(mod3_diagnostics$nsp_diag)
+  cl2_mod3_diagnostics$smr
+  plot(cl2_mod3_diagnostics$nsp_diag)
   
+  cl2_chosen_model <- list(cl2_mod2, cl2_mod2_diagnostics)
   #Winter crops is the main explanation for differences in drainage density across
   #the department. No residual correlation with other variables
   #No residual spatial autocorrelation.
   
+  #Class 3 model - Ain, Ardennes, Drome, Haute-Pyrennees -----------------------
+  print('Selecting model for class 3')
+  
+  dat_for_mod_cl3 <- get_dat_formod(
+    in_dt_melt=env_dd_melt_gclass, 
+    in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
+    in_bvdep_inters_vect = bvdep_inters_vect,
+    in_gclass=3) 
+  
+  dat_for_mod_cl3$ddratio_env_plot
+  check <- unique(dat_for_mod_cl3$dat, by= c('variable', 'INSEE_DEP'))
+  
+  ggplot(dat_for_mod_cl3$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
+    geom_histogram() 
+  ggplot(dat_for_mod_cl3$dat_cast, 
+         aes(x=sqrt(ppc_pk_sav), y=ddt_to_bdtopo_ddratio_ceind)) +
+    geom_point() +
+    geom_smooth(method='lm')
+  
+  dat_for_mod_cl3$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
+  dat_for_mod_cl3$dat_cast[, wcr_pc_sse_sqrt := sqrt(wcr_pc_sse)]
+  dat_for_mod_cl3$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
+  
+  #Model 0: null model - dd ratio ~ dep
+  cl3_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
+                 data=dat_for_mod_cl3$dat_cast,
+                 weights=dat_for_mod_cl3$dat_cast$bv_area)
+  summary(cl3_mod0)
+  
+  #Model 1: dd ratio ~ winter crops + dep
+  cl3_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt + INSEE_DEP,
+                 data=dat_for_mod_cl3$dat_cast,
+                 weights=dat_for_mod_cl3$dat_cast$bv_area)
+
+  cl3_mod1_diagnostics <- postprocess_model(in_mod = cl3_mod1,
+                                        in_dat_for_mod = dat_for_mod_cl3)
+  cl3_mod1_diagnostics$smr
+  plot(cl3_mod1_diagnostics$nsp_diag)
+  plot(cl3_mod1_diagnostics$resid_env_p)
+  
+  #Model 2: dd ratio ~ winter crops + dep + orchards
+  cl3_mod2 <- lm(
+    ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt + orc_pc_sse + INSEE_DEP,
+    data=dat_for_mod_cl3$dat_cast,
+    weights=dat_for_mod_cl3$dat_cast$bv_area)
+  
+  cl3_mod2_diagnostics <- postprocess_model(in_mod = cl3_mod2,
+                                        in_dat_for_mod = dat_for_mod_cl3)
+  cl3_mod2_diagnostics$smr
+  plot(cl3_mod2_diagnostics$nsp_diag)
+  plot(cl3_mod2_diagnostics$resid_env_p)
+  
+  #Model 3: dd ratio ~ winter crops + dep + orchards + vineyards
+  cl3_mod3 <- lm(
+    ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt + orc_pc_sse + vny_pc_sse +
+      INSEE_DEP,
+    data = dat_for_mod_cl3$dat_cast,
+    weights = dat_for_mod_cl3$dat_cast$bv_area)
+  
+  cl3_mod3_diagnostics <- postprocess_model(in_mod = cl3_mod3,
+                                        in_dat_for_mod = dat_for_mod_cl3)
+  cl3_mod3_diagnostics$smr
+  plot(cl3_mod3_diagnostics$nsp_diag)
+  plot(cl3_mod3_diagnostics$resid_env_p)
+  
+  #Model 4: dd ratio  ~ winter crops*dep + orchards + vineyards
+  cl3_mod4 <- lm(
+    ddt_to_bdtopo_ddratio_ceind ~ wcr_pc_sse_sqrt*INSEE_DEP + orc_pc_sse + vny_pc_sse,
+    data = dat_for_mod_cl3$dat_cast,
+    weights = dat_for_mod_cl3$dat_cast$bv_area)
+  summary(cl3_mod4)
+  
+  cl3_mod4_diagnostics <- postprocess_model(in_mod = cl3_mod4,
+                                        in_dat_for_mod = dat_for_mod_cl3)
+  cl3_mod4_diagnostics$smr
+  plot(cl3_mod4_diagnostics$nsp_diag)
+  plot(cl3_mod4_diagnostics$resid_env_p)
+  
+  #Model 5: dd ratio  ~ winter crops*dep + orchards + vineyards + ire_pc_sse*dep
+  cl3_mod5 <- lm(
+    ddt_to_bdtopo_ddratio_ceind ~ 
+      wcr_pc_sse_sqrt*INSEE_DEP +
+      orc_pc_sse + vny_pc_sse +
+      ire_pc_sse*INSEE_DEP,
+    data = dat_for_mod_cl3$dat_cast,
+    weights = dat_for_mod_cl3$dat_cast$bv_area)
+
+  cl3_mod5_diagnostics <- postprocess_model(in_mod = cl3_mod5,
+                                        in_dat_for_mod = dat_for_mod_cl3,
+                                        spatial_analysis=T)
+  vif(cl3_mod5)
+  cl3_mod5_diagnostics$smr
+  plot(cl3_mod5_diagnostics$nsp_diag)
+  plot(cl3_mod5_diagnostics$resid_env_p)
+  cl3_mod5_diagnostics$resids_sp_p
+  cl3_mod5_diagnostics$moran_lm
+  
+  #Model 6: dd ratio  ~ winter crops*dep + orchards + vineyards + scr_pc_sse*dep
+  cl3_mod6 <- lm(
+    ddt_to_bdtopo_ddratio_ceind ~ 
+      wcr_pc_sse_sqrt*INSEE_DEP +
+      orc_pc_sse + vny_pc_sse +
+      scr_pc_sse*INSEE_DEP,
+    data = dat_for_mod_cl3$dat_cast,
+    weights = dat_for_mod_cl3$dat_cast$bv_area)
+  vif(cl3_mod6)
+  
+  cl3_mod6_diagnostics <- postprocess_model(in_mod = cl3_mod6,
+                                        in_dat_for_mod = dat_for_mod_cl3,
+                                        spatial_analysis=F)
+  cl3_mod6_diagnostics$smr
+  plot(cl3_mod6_diagnostics$nsp_diag)
+  plot(cl3_mod6_diagnostics$resid_env_p)
+  #cl3_mod6_diagnostics$resids_sp_p
+  
+  #mod 7
+  cl3_mod7 <- lm(
+    ddt_to_bdtopo_ddratio_ceind ~ 
+      wcr_pc_sse_sqrt*INSEE_DEP +
+      orc_pc_sse + vny_pc_sse +
+      ire_pc_sse*INSEE_DEP +
+      ppc_pk_sav_sqrt,
+    data = dat_for_mod_cl3$dat_cast,
+    weights = dat_for_mod_cl3$dat_cast$bv_area)
+  
+  summary(cl3_mod7)
+
+  cl3_chosen_model <- list(cl3_mod5, cl3_mod5_diagnostics)
+  #The chosen model is the fifth:
+  # ddt_to_bdtopo_ddratio_ceind ~ wcr_pc_sse_sqrt*INSEE_DEP +
+  #                               orc_pc_sse + vny_pc_sse +
+  #                               ire_pc_sse*INSEE_DEP
+  # All agriculturally driven. Summer crops are also correlated but 
+  # autocorrelated with winter crops, so kept winter crops.
+  # Spatial autocorrelation test is non-significant but there are clusteres
+  # of substantial residuals (in southern Ain notably)
+  
+  #Class 4 model - 15 departments ----------------------------------------------
+  print('Selecting model for class 4')
+  
+  dat_for_mod_cl4 <- get_dat_formod(
+    in_dt_melt=env_dd_melt_gclass, 
+    in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
+    in_bvdep_inters_vect = bvdep_inters_vect,
+    in_gclass=4) 
+  
+  dat_for_mod_cl4$ddratio_env_plot
+  check <- dat_for_mod_cl4$dat[, mean(cor), by= c('variable')]
+  
+  ggplot(dat_for_mod_cl4$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
+    geom_histogram() 
+  ggplot(dat_for_mod_cl4$dat_cast, 
+         aes(x=sqrt(wcr_pc_sse), y=ddt_to_bdtopo_ddratio_ceind,
+             color=INSEE_DEP)) +
+    geom_point() +
+    geom_smooth(method='lm', se=F)
+  
+  dat_for_mod_cl4$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
+  dat_for_mod_cl4$dat_cast[, wcr_pc_sse_sqrt := sqrt(wcr_pc_sse)]
+  dat_for_mod_cl4$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
+  
+  #Model 0: null model - dd ratio ~ dep
+  cl4_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
+                 data=dat_for_mod_cl4$dat_cast,
+                 weights=dat_for_mod_cl4$dat_cast$bv_area)
+  summary(cl4_mod0)
+  
+  #Model 1: dd ratio ~ winter crops + dep
+  cl4_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt + INSEE_DEP,
+                 data=dat_for_mod_cl4$dat_cast,
+                 weights=dat_for_mod_cl4$dat_cast$bv_area)
+  
+  cl4_mod1_diagnostics <- postprocess_model(in_mod = cl4_mod1,
+                                        in_dat_for_mod = dat_for_mod_cl4)
+  cl4_mod1_diagnostics$smr
+  plot(cl4_mod1_diagnostics$nsp_diag)
+  plot(cl4_mod1_diagnostics$resid_env_p)
+  
+  #Model 2: dd ratio ~ winter crops*dep
+  cl4_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt*INSEE_DEP,
+                 data=dat_for_mod_cl4$dat_cast,
+                 weights=dat_for_mod_cl4$dat_cast$bv_area)
+  
+  cl4_mod2_diagnostics <- postprocess_model(in_mod = cl4_mod2,
+                                        in_dat_for_mod = dat_for_mod_cl4)
+  cl4_mod2_diagnostics$smr
+  plot(cl4_mod2_diagnostics$nsp_diag)
+  plot(cl4_mod2_diagnostics$resid_env_p)
+  
+  #Model 3: dd ratio ~ mean annual aridity + dep
+  cl4_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind~ari_ix_syr + INSEE_DEP,
+                 data=dat_for_mod_cl4$dat_cast,
+                 weights=dat_for_mod_cl4$dat_cast$bv_area)
+  
+  cl4_mod3_diagnostics <- postprocess_model(in_mod = cl4_mod3,
+                                        in_dat_for_mod = dat_for_mod_cl4)
+  cl4_mod3_diagnostics$smr
+  plot(cl4_mod3_diagnostics$nsp_diag)
+  plot(cl4_mod3_diagnostics$resid_env_p)
+  
+  #Model 4: dd ratio ~ mean annual aridity*dep
+  cl4_mod4 <- lm(ddt_to_bdtopo_ddratio_ceind~ari_ix_syr*INSEE_DEP,
+                 data=dat_for_mod_cl4$dat_cast,
+                 weights=dat_for_mod_cl4$dat_cast$bv_area)
+  
+  cl4_mod4_diagnostics <- postprocess_model(in_mod = cl4_mod4,
+                                        in_dat_for_mod = dat_for_mod_cl4)
+  cl4_mod4_diagnostics$smr
+  plot(cl4_mod4_diagnostics$nsp_diag)
+  plot(cl4_mod4_diagnostics$resid_env_p)
+  
+  #Model 5: dd ratio ~ wintercrop*dep + mean annual aridity*dep
+  cl4_mod5 <- lm(ddt_to_bdtopo_ddratio_ceind~ari_ix_syr*INSEE_DEP + 
+                   wcr_pc_sse_sqrt*INSEE_DEP,
+                 data=dat_for_mod_cl4$dat_cast,
+                 weights=dat_for_mod_cl4$dat_cast$bv_area)
+
+  cl4_mod5_diagnostics <- postprocess_model(in_mod = cl4_mod5,
+                                        in_dat_for_mod = dat_for_mod_cl4)
+  cl4_mod5_diagnostics$smr
+  plot(cl4_mod5_diagnostics$nsp_diag)
+  plot(cl4_mod5_diagnostics$resid_env_p)
+  
+  #Model 6: dd ratio ~ wintercrop*dep + predicted percentage intermittency*dep
+  cl4_mod6 <- lm(ddt_to_bdtopo_ddratio_ceind~irs_pc_sav*INSEE_DEP + 
+                   wcr_pc_sse_sqrt*INSEE_DEP,
+                 data=dat_for_mod_cl4$dat_cast,
+                 weights=dat_for_mod_cl4$dat_cast$bv_area)
+  
+  cl4_mod6_diagnostics <- postprocess_model(in_mod = cl4_mod6,
+                                        in_dat_for_mod = dat_for_mod_cl4)
+  cl4_mod6_diagnostics$smr
+  plot(cl4_mod6_diagnostics$nsp_diag)
+  plot(cl4_mod6_diagnostics$resid_env_p)
+  cl4_mod6_diagnostics$resids_sp_p + 
+    scale_fill_distiller(palette="Spectral",
+                         limits=c(-0.4, 0.4))
+  cl4_mod6_diagnostics$moran_lm
+  cl4_mod6_diagnostics$LMtests
+  
+  #Model 7: dd ratio ~ wintercrop*dep + predicted percentage intermittency*dep +
+  #                     summercrop
+  cl4_mod7 <- lm(ddt_to_bdtopo_ddratio_ceind~irs_pc_sav*INSEE_DEP + 
+                   wcr_pc_sse_sqrt*INSEE_DEP +
+                   scr_pc_sse*INSEE_DEP,
+                 data=dat_for_mod_cl4$dat_cast,
+                 weights=dat_for_mod_cl4$dat_cast$bv_area)
+  
+  cl4_mod7_diagnostics <- postprocess_model(in_mod = cl4_mod7,
+                                        in_dat_for_mod = dat_for_mod_cl4)
+  cl4_mod7_diagnostics$smr
+  plot(cl4_mod7_diagnostics$nsp_diag)
+  plot(cl4_mod7_diagnostics$resid_env_p)
+  #Too much becomes insignificant
+  
+  cl4_chosen_model <- list(cl4_mod6, cl4_mod6_diagnostics)
+  
+  #Class 5 model - 60 departments ----------------------------------------------
+  print('Selecting model for class 5')
+  
+  dat_for_mod_cl5 <- get_dat_formod(
+    in_dt_melt=env_dd_melt_gclass, 
+    in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
+    in_bvdep_inters_vect = bvdep_inters_vect,
+    in_gclass=5) 
+  
+  dat_for_mod_cl5$dat_cast[
+    is.na(ari_ix_ssu), 
+    ari_ix_ssu := mean(dat_for_mod_cl5$dat_cast$ari_ix_ssu, na.rm=T)]
+  
+  dat_for_mod_cl5$ddratio_env_plot
+  check <- dat_for_mod_cl5$dat[, mean(cor), by= c('variable')]
+  
+  ggplot(dat_for_mod_cl5$dat_cast, aes(x=sqrt(ddt_to_bdtopo_ddratio_ceind))) +
+    geom_histogram() 
+  ggplot(dat_for_mod_cl5$dat_cast, 
+         aes(x=sqrt(wcr_pc_sse), y=sqrt(ddt_to_bdtopo_ddratio_ceind),
+             color=INSEE_DEP)) +
+    geom_point() +
+    geom_smooth(method='lm', se=F)
+  
+  dat_for_mod_cl5$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
+  dat_for_mod_cl5$dat_cast[, wcr_pc_sse_sqrt := sqrt(wcr_pc_sse)]
+  dat_for_mod_cl5$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
+  
+  dat_for_mod_cl5$dat_cast[duplicated(ddt_to_bdtopo_ddratio_ceind),]
+  
+  #Null model 
+  cl5_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
+                 data=dat_for_mod_cl5$dat_cast,
+                 weights=dat_for_mod_cl5$dat_cast$bv_area)
+  summary(cl5_mod0)
+  
+  #Model 1: dd ratio ~ winter crops + dep
+  cl5_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt + INSEE_DEP,
+                 data=dat_for_mod_cl5$dat_cast,
+                 weights=dat_for_mod_cl5$dat_cast$bv_area)
+  summary(cl5_mod1)
+  
+  #Model 2: dd ratio ~ winter crops*dep
+  cl5_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt*INSEE_DEP,
+                 data=dat_for_mod_cl5$dat_cast,
+                 weights=dat_for_mod_cl5$dat_cast$bv_area)
+  summary(cl5_mod2)
+  
+  
+  #Model 3: dd ratio ~ winter crops*dep + summer aridity
+  cl5_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt*INSEE_DEP + 
+                   ari_ix_ssu,
+                 data=dat_for_mod_cl5$dat_cast,
+                 weights=dat_for_mod_cl5$dat_cast$bv_area)
+  summary(cl5_mod3)
+
+  mod3_diagnostics <- postprocess_model(in_mod = cl5_mod3,
+                                        in_dat_for_mod = dat_for_mod_cl5,
+                                        spatial_analysis = T)
+  cl5_mod3_diagnostics$smr
+  plot(cl5_mod3_diagnostics$nsp_diag)
+  plot(cl5_mod3_diagnostics$resid_env_p)
+  
+  #Model 4: dd ratio ~ winter crops*dep + summer aridity*dep
+  cl5_mod4 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt*INSEE_DEP + 
+                   ari_ix_ssu*INSEE_DEP,
+                 data=dat_for_mod_cl5$dat_cast,
+                 weights=dat_for_mod_cl5$dat_cast$bv_area)
+  summary(cl5_mod4)
+  
+  cl5_chosen_model <- list(cl5_mod3, cl5_mod3_diagnostics)
+  #############NMOD 3 is chosen. need to finish diagnostics, but launch it when got time
+  
+  
+  #Class 6 model - Landes, Gironde, Indre --------------------------------------
+  print('Selecting model for class 6')
+  
+  dat_for_mod_cl6 <- get_dat_formod(
+    in_dt_melt=env_dd_melt_gclass, 
+    in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
+    in_bvdep_inters_vect = bvdep_inters_vect,
+    in_gclass=6) 
+  
+  ## determine the column names that contain NA values
+  nm <- names(dat_for_mod_cl6$dat_cast)[colSums(is.na(dat_for_mod_cl6$dat_cast)) != 0]
+  ## replace with the mean - by 'id'
+  dat_for_mod_cl6$dat_cast[, (nm) := lapply(nm, function(x) {
+    x <- get(x)
+    x[is.na(x)] <- mean(x, na.rm = TRUE)
+    x
+  }), by = 'INSEE_DEP']
+  
+  dat_for_mod_cl6$ddratio_env_plot
+  check <- dat_for_mod_cl6$dat[, mean(cor), by= c('variable')]
+  
+  ggplot(dat_for_mod_cl6$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
+    geom_histogram() 
+  ggplot(dat_for_mod_cl6$dat_cast, 
+         aes(x=sqrt(pst_pc_sse), y=ddt_to_bdtopo_ddratio_ceind,
+             color=INSEE_DEP)) +
+    geom_point() +
+    geom_smooth(method='lm', se=F)
+  
+  dat_for_mod_cl6$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
+  dat_for_mod_cl6$dat_cast[, pst_pc_sse_sqrt := sqrt(pst_pc_sse)]
+  #dat_for_mod_cl6$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
+  
+  #Model 0: null model - dd ratio ~ dep
+  cl6_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
+                 data=dat_for_mod_cl6$dat_cast,
+                 weights=dat_for_mod_cl6$dat_cast$bv_area)
+  summary(cl6_mod0)
+  
+  #Model 1: dd ratio ~ pasture + dep
+  cl6_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~pst_pc_sse_sqrt + INSEE_DEP,
+                 data=dat_for_mod_cl6$dat_cast,
+                 weights=dat_for_mod_cl6$dat_cast$bv_area)
+  
+  cl6_mod1_diagnostics <- postprocess_model(in_mod = cl6_mod1,
+                                        in_dat_for_mod = dat_for_mod_cl6)
+  cl6_mod1_diagnostics$smr
+  plot(cl6_mod1_diagnostics$nsp_diag)
+  plot(cl6_mod1_diagnostics$resid_env_p)
+  
+  #Model 2: dd ratio ~ pasture + irs_pc_sav*dep
+  cl6_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind~pst_pc_sse_sqrt + 
+                   irs_pc_sav*INSEE_DEP,
+                 data=dat_for_mod_cl6$dat_cast,
+                 weights=dat_for_mod_cl6$dat_cast$bv_area)
+  
+  cl6_mod2_diagnostics <- postprocess_model(in_mod = cl6_mod2,
+                                        in_dat_for_mod = dat_for_mod_cl6)
+  cl6_mod2_diagnostics$smr
+  plot(cl6_mod2_diagnostics$nsp_diag)
+  plot(cl6_mod2_diagnostics$resid_env_p)
+  
+  #Model 3: dd ratio ~ pasture + irs_pc_sav*dep
+  cl6_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind~pst_pc_sse_sqrt*INSEE_DEP + 
+                   irs_pc_sav*INSEE_DEP,
+                 data=dat_for_mod_cl6$dat_cast,
+                 weights=dat_for_mod_cl6$dat_cast$bv_area)
+  
+  cl6_mod3_diagnostics <- postprocess_model(in_mod = cl6_mod3,
+                                        in_dat_for_mod = dat_for_mod_cl6)
+  cl6_mod3_diagnostics$smr
+  plot(cl6_mod3_diagnostics$nsp_diag)
+  plot(cl6_mod3_diagnostics$resid_env_p)
+  
+  #Model 4: dd ratio ~ pasture*dep + irs_pc_sav*dep + imperviousness
+  cl6_mod4 <- lm(ddt_to_bdtopo_ddratio_ceind~pst_pc_sse_sqrt*INSEE_DEP + 
+                   irs_pc_sav*INSEE_DEP + imp_pc_sse,
+                 data=dat_for_mod_cl6$dat_cast[!72,], #Basedon cook's distance outlier detection
+                 weights=dat_for_mod_cl6$dat_cast[!72, bv_area])
+  
+  cl6_mod4_diagnostics <- postprocess_model(in_mod = cl6_mod4,
+                                        in_dat_for_mod = dat_for_mod_cl6,
+                                        removed_index = 72)
+  cl6_mod4_diagnostics$smr
+  plot(cl6_mod4_diagnostics$nsp_diag)
+  plot(cl6_mod4_diagnostics$resid_env_p)
+  cl6_mod4_diagnostics$resids_sp_p
+  cl6_mod4_diagnostics$moran_lm
+  
+  #Model 5: dd ratio ~ pasture*dep + irs_pc_sav*dep + imperviousness + summer aridity
+  cl6_mod5 <- lm(ddt_to_bdtopo_ddratio_ceind~pst_pc_sse_sqrt*INSEE_DEP + 
+                   irs_pc_sav*INSEE_DEP + imp_pc_sse + ari_ix_ssu,
+                 data=dat_for_mod_cl6$dat_cast[!72,], #Basedon cook's distance outlier detection
+                 weights=dat_for_mod_cl6$dat_cast[!72, bv_area])
+  
+  cl6_mod5_diagnostics <- postprocess_model(in_mod = cl6_mod5,
+                                        in_dat_for_mod = dat_for_mod_cl6,
+                                        removed_index = 72)
+  cl6_mod5_diagnostics$smr
+  plot(cl6_mod5_diagnostics$nsp_diag)
+  plot(cl6_mod5_diagnostics$resid_env_p)
+  cl6_mod5_diagnostics$resids_sp_p
+  cl6_mod5_diagnostics$moran_lm
+  
+  cl6_chosen_model <- list(cl6_mod5, cl6_mod5_diagnostics)
+  #Model 5 is the chosen model
+  
+  #Class 7 model - Seine-Maritime, Charente-Maritime ---------------------------
+  print('Selecting model for class 7')
+  
+  dat_for_mod_cl7 <- get_dat_formod(
+    in_dt_melt=env_dd_melt_gclass, 
+    in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
+    in_bvdep_inters_vect = bvdep_inters_vect,
+    in_gclass=7) 
+  
+  dat_for_mod_cl7$ddratio_env_plot + geom_smooth(method='lm', se=F)
+  check <- dat_for_mod_cl7$dat[, mean(cor), by= c('variable')]
+  
+  ggplot(dat_for_mod_cl7$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
+    geom_histogram() 
+  ggplot(dat_for_mod_cl7$dat_cast, 
+         aes(x=ari_ix_syr, y=ddt_to_bdtopo_ddratio_ceind,
+             color=factor(INSEE_DEP) )) +
+    geom_point() +
+    geom_smooth(method='lm', se=F, aes(weight=bv_area))
+  
+  dat_for_mod_cl7$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
+  dat_for_mod_cl7$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
+
+  ## determine the column names that contain NA values
+  nm <- names(dat_for_mod_cl7$dat_cast)[
+    colSums(is.na(dat_for_mod_cl7$dat_cast)) != 0]
+  ## replace with the mean - by 'id'
+  dat_for_mod_cl7$dat_cast[, (nm) := lapply(nm, function(x) {
+    x <- get(x)
+    x[is.na(x)] <- mean(x, na.rm = TRUE)
+    x
+  }), by = 'INSEE_DEP']
+  
+  dat_for_mod_cl7$dat_cast[is.infinite(bar_bk_ssu_TOTAL), 
+                           bar_bk_ssu_TOTAL := 0]
+  
+  #Model 0: null model - dd ratio ~ dep
+  cl7_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
+                 data=dat_for_mod_cl7$dat_cast,
+                 weights=dat_for_mod_cl7$dat_cast$bv_area)
+  summary(cl7_mod0)
+  
+  #Model 1: dd ratio ~ annual aridity*dep
+  cl7_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ari_ix_syr*INSEE_DEP,
+                 data=dat_for_mod_cl7$dat_cast,
+                 weights=dat_for_mod_cl7$dat_cast$bv_area)
+  
+  cl7_mod1_diagnostics <- postprocess_model(in_mod = cl7_mod1,
+                                        in_dat_for_mod = dat_for_mod_cl7,
+                                        spatial_analysis = T)
+  cl7_mod1_diagnostics$smr
+  cl7_mod1_diagnostics$resids_sp_p
+  plot(cl7_mod1_diagnostics$nsp_diag)
+  plot(cl7_mod1_diagnostics$resid_env_p)
+  
+  #Model 2: dd ratio ~ manual aridity*dep  + AWC*dep
+  cl7_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ari_ix_syr*INSEE_DEP + 
+                   awc_mm_sav*INSEE_DEP,
+                 data=dat_for_mod_cl7$dat_cast,
+                 weights=dat_for_mod_cl7$dat_cast$bv_area)
+  
+  cl7_mod2_diagnostics <- postprocess_model(
+    in_mod = cl7_mod2,
+    in_dat_for_mod = dat_for_mod_cl7,
+    spatial_analysis = T
+  )
+  
+  cl7_mod2_diagnostics$smr
+  cl7_mod2_diagnostics$resids_sp_p
+  plot(cl7_mod2_diagnostics$nsp_diag)
+  plot(cl7_mod2_diagnostics$resid_env_p)
+  
+  #Model 3: dd ratio ~ manual aridity*dep  + AWC*dep + population density
+  cl7_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ari_ix_syr*INSEE_DEP + 
+                   awc_mm_sav*INSEE_DEP + ppc_pk_sav_sqrt ,
+                 data=dat_for_mod_cl7$dat_cast,
+                 weights=dat_for_mod_cl7$dat_cast$bv_area)
+  
+  cl7_mod3_diagnostics <- postprocess_model(
+    in_mod = cl7_mod3,
+    in_dat_for_mod = dat_for_mod_cl7,
+    spatial_analysis = T
+  )
+  
+  cl7_mod3_diagnostics$smr
+  cl7_mod3_diagnostics$resids_sp_p
+  plot(cl7_mod3_diagnostics$nsp_diag)
+  plot(cl7_mod3_diagnostics$resid_env_p)
+  cl7_mod3_diagnostics$moran_lm
+  cl7_mod3_diagnostics$LMtests
+  
+  #Model 4: dd ratio ~ manual aridity*dep  + AWC*dep + population density +
+  #                     pst_pc_sse
+  cl7_mod4 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ari_ix_syr*INSEE_DEP + 
+                   awc_mm_sav*INSEE_DEP + ppc_pk_sav_sqrt + pst_pc_sse,
+                 data=dat_for_mod_cl7$dat_cast,
+                 weights=dat_for_mod_cl7$dat_cast$bv_area)
+  
+  cl7_mod4_diagnostics <- postprocess_model(
+    in_mod = cl7_mod4,
+    in_dat_for_mod = dat_for_mod_cl7,
+    spatial_analysis = F
+  )
+  
+  cl7_mod4_diagnostics$smr
 
   
+  #Model 5: dd ratio ~ manual aridity*dep  + pasture*dep + population density 
+  cl7_mod5 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ari_ix_syr*INSEE_DEP + 
+                   pst_pc_sse*INSEE_DEP + ppc_pk_sav_sqrt,
+                 data=dat_for_mod_cl7$dat_cast,
+                 weights=dat_for_mod_cl7$dat_cast$bv_area)
   
-  ##############
-  #Other good resource: https://eburchfield.github.io/files/Spatial_regression_LAB.html
-  resnorm <- rstandard(modlistlogZnstand[[36]]) #Get standardized residuals from model
-  #Make bubble map of residuals
-  bubbledat <- data.frame(resnorm, 
-                          pollutfieldclean_cast$coords.x1, 
-                          pollutfieldclean_cast$coords.x2)
-  coordinates(bubbledat) <- c("pollutfieldclean_cast.coords.x1","pollutfieldclean_cast.coords.x2")
-  bubble(bubbledat, "resnorm", col = c("blue","red"),
-         main = "Residuals", xlab = "X-coordinates",
-         ylab = "Y-coordinates")
-  #Check semi-variogram of residuals
-  plot(variogram(resnorm~1, bubbledat, cutoff=2000, width=100)) #isotropic
-  plot(variogram(resnorm~1, bubbledat, cutoff= 2000, width=100, alpha = c(0, 45, 90,135))) #anisotropic
-  #Check spline correlogram ()
-  plot(spline.correlog(x=coordinates(bubbledat)[,1], y=coordinates(bubbledat)[,2],
-                       z=bubbledat$resnorm, resamp=500, quiet=TRUE, xmax = 5000))
-  #Compute a spatial weight matrix based on IDW
-  weightmat_k <- lapply(1:10, function(i) {
-    weightmat_IDW(pollutfieldclean_cast[,.(coords.x1, coords.x2)], knb = i, mindist = 10)}) #Based on 10 nearest neighbors
-  weightmat_all <- weightmat_IDW(pollutfieldclean_cast[,.(coords.x1, coords.x2)], knb = NULL, mindist = 10) #Based on all points
+  cl7_mod5_diagnostics <- postprocess_model(
+    in_mod = cl7_mod5,
+    in_dat_for_mod = dat_for_mod_cl7,
+    spatial_analysis = T
+  )
   
-  #Moran plots
-  #lag_resnorm <- lag.listw(weightmat_all, resnorm) #Can be used to create customized Moran plot by plotting residuals against matrix
-  moran.plot(resnorm, weightmat_all, labels=pollutfieldclean_cast[, SiteIDPair], pch=19)
-  moran.plot(resnorm, weightmat_k[[2]], labels=pollutfieldclean_cast[, SiteIDPair], pch=19)
+  cl7_mod5_diagnostics$smr
+  cl7_mod5_diagnostics$resids_sp_p
+  plot(cl7_mod5_diagnostics$nsp_diag)
+  plot(cl7_mod5_diagnostics$resid_env_p)
+  cl7_mod5_diagnostics$moran_lm
+  cl7_mod5_diagnostics$LMtests
   
-  #Compute Moran's I
-  "Should always only use lm.morantest for residuals from regression, see http://r-sig-geo.2731867.n2.nabble.com/Differences-between-moran-test-and-lm-morantest-td7591336.html
-for an explanation"
-  lm.morantest(modlistlogZnstand[[36]], listw = listw2U(weightmat_k[[1]])) #lisw2U Make sure that distance matrix is symmetric (assumption in Moran's I)
-  lm.morantest(modlistlogZnstand[[36]], listw = listw2U(weightmat_k[[2]])) #lisw2U Make sure that distance matrix is symmetric (assumption in Moran's I)
-  lm.morantest(modlistlogZnstand[[36]], listw = listw2U(weightmat_k[[3]])) #lisw2U Make sure that distance matrix is symmetric (assumption in Moran's I)
-  lm.morantest(modlistlogZnstand[[36]], listw = listw2U(weightmat_k[[4]])) #lisw2U Make sure that distance matrix is symmetric (assumption in Moran's I)
-  lm.morantest(modlistlogZnstand[[36]], listw = listw2U(weightmat_k[[5]])) #lisw2U Make sure that distance matrix is symmetric (assumption in Moran's I)
-  lm.morantest(modlistlogZnstand[[36]], listw = listw2U(weightmat_all)) #lisw2U Make sure that distance matrix is symmetric (assumption in Moran's I)
+  cl7_chosen_model <- list(cl7_mod3, cl7_mod3_diagnostics)
+  #Model 3 and Model 5 are two potential models
+  #Model 5 which includes pasture is less prefered, albeit higher explanatory power
+  #because the direction of the relationship with pasture is opposite between the departments
+  #and stronger residual spatial autocorrelation
   
-  #Test for need for spatial regression model using Lagrange Multiplier (LM) tests
-  lm.LMtests(modlistlogZnstand[[36]], listw = listw2U(weightmat_k[[1]]), test=c("LMerr","RLMerr", "RLMlag", "SARMA"))
-  lm.LMtests(modlistlogZnstand[[36]], listw = listw2U(weightmat_k[[2]]), test=c("LMerr","RLMerr", "RLMlag", "SARMA"))
-  lm.LMtests(modlistlogZnstand[[36]], listw = listw2U(weightmat_k[[3]]), test=c("LMerr","RLMerr", "RLMlag", "SARMA"))
+  #Class 8 model - Yvelines ----------------------------------------------------
+  print('Selecting model for class 8')
   
-  #Spatial simultaneous autoregressive error model estimation with 1 nearest neighbors
-  sarlm_modlogZnstand <- errorsarlm(modlistlogZnstand[[36]]$call$formula, data = modlistlogZnstand[[36]]$model, 
-                                    listw = listw2U(weightmat_k[[1]]))
-  summary(sarlm_modlogZnstand)
-  bptest.sarlm(sarlm_modlogZnstand)
-  cor(modlistlogZnstand[[36]]$model$logZnstand, fitted(sarlm_modlogZnstand))^2
+  dat_for_mod_cl8 <- get_dat_formod(
+    in_dt_melt=env_dd_melt_gclass, 
+    in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
+    in_bvdep_inters_vect = bvdep_inters_vect,
+    in_gclass=8) 
   
-  #Compare pseudo-R2
-  cor(pollutfieldclean_cast$Znstand, exp(predict(sarlm_modlogZnstand, pred.type='trend')))^2
-  cor(pollutfieldclean_cast$Znstand,
-      with(pollutfieldclean_cast, exp(sarlm_modlogZnstand$coefficients['(Intercept)'] + 
-                                        sarlm_modlogZnstand$coefficients['heatsubAADTlog100frt']*heatsubAADTlog100frt + 
-                                        sarlm_modlogZnstand$coefficients['nlcd_imp_ps_mean']*nlcd_imp_ps_mean)))^2
-  #############
+  dat_for_mod_cl8$ddratio_env_plot
+  check <- dat_for_mod_cl8$dat[, mean(cor), by= c('variable')]
+  
+  ggplot(dat_for_mod_cl8$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
+    geom_histogram() 
+
+  
+  dat_for_mod_cl8$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
+  dat_for_mod_cl8$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
+  dat_for_mod_cl8$dat_cast[, bar_bk_ssu_TOTAL_sqrt := sqrt(bar_bk_ssu_TOTAL)]
+  
+  ggplot(dat_for_mod_cl8$dat_cast, 
+         aes(x= bar_bk_ssu_TOTAL_sqrt, y=ddt_to_bdtopo_ddratio_ceind,
+             color=INSEE_DEP, size=bv_area)) +
+    geom_point() +
+    geom_smooth(method='lm', se=F)
+
+  #Model 1: dd ratio ~ winter crops + dep
+  cl8_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~bar_bk_ssu_TOTAL_sqrt,
+                 data=dat_for_mod_cl8$dat_cast,
+                 weights=dat_for_mod_cl8$dat_cast$bv_area)
+  
+  cl8_mod1_diagnostics <- postprocess_model(in_mod = cl8_mod1,
+                                        in_dat_for_mod = dat_for_mod_cl8)
+  cl8_mod1_diagnostics$smr
+  plot(cl8_mod1_diagnostics$nsp_diag)
+  plot(cl8_mod1_diagnostics$resid_env_p)
+  
+  #Model 2: dd ratio ~ winter crops + dep
+  cl8_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind~bar_bk_ssu_TOTAL_sqrt + slo_dg_sav,
+                 data=dat_for_mod_cl8$dat_cast,
+                 weights=dat_for_mod_cl8$dat_cast$bv_area)
+  
+  cl8_mod2_diagnostics <- postprocess_model(in_mod = cl8_mod2,
+                                        in_dat_for_mod = dat_for_mod_cl8,
+                                        spatial_analysis = T)
+  cl8_mod2_diagnostics$smr
+  plot(cl8_mod2_diagnostics$nsp_diag)
+  plot(cl8_mod2_diagnostics$resid_env_p)
+  plot(cl8_mod2_diagnostics$resids_sp_p)
+  cl8_mod2_diagnostics$moran_lm
+
+  #Choose mod 2
+  cl8_chosen_model <- list(cl8_mod2, cl8_mod2_diagnostics)
+  
+  #Class 9 model - Nord, Bouches-du-Rhones -------------------------------------
+  print('Selecting model for class 9')
+  
+  dat_for_mod_cl9 <- get_dat_formod(
+    in_dt_melt=env_dd_melt_gclass, 
+    in_envdd_multivar_analysis=in_envdd_multivar_analysis, 
+    in_bvdep_inters_vect = bvdep_inters_vect,
+    in_gclass=9) 
+  
+  dat_for_mod_cl9$ddratio_env_plot
+  check <- dat_for_mod_cl9$dat[, mean(cor), by= c('variable')]
+  
+  #Exclude the four sub-basins with ratios over 3.5
+  dat_for_mod_cl9$dat_cast <- dat_for_mod_cl9$dat_cast[
+    ddt_to_bdtopo_ddratio_ceind < 3.5,]
+  
+  ggplot(dat_for_mod_cl9$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
+    geom_histogram() 
+  ggplot(dat_for_mod_cl9$dat_cast, 
+         aes(x=sqrt(ire_pc_sse), y=ddt_to_bdtopo_ddratio_ceind,
+             color=factor(INSEE_DEP))) +
+    geom_point() +
+    geom_smooth(method='lm', se=F, aes(weight=bv_area))
+  
+  dat_for_mod_cl9$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
+  dat_for_mod_cl9$dat_cast[, ire_pc_sse_sqrt := sqrt(ire_pc_sse)]
+  
+  #Model 0: null model - dd ratio ~ dep
+  cl9_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
+                 data=dat_for_mod_cl9$dat_cast,
+                 weights=dat_for_mod_cl9$dat_cast$bv_area)
+  summary(cl9_mod0)
+  
+  #Model 1: dd ratio ~ irrigation*dep
+  cl9_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ire_pc_sse_sqrt*INSEE_DEP,
+                 data=dat_for_mod_cl9$dat_cast,
+                 weights=dat_for_mod_cl9$dat_cast$bv_area)
+  
+  cl9_mod1_diagnostics <- postprocess_model(in_mod = cl9_mod1,
+                                        in_dat_for_mod = dat_for_mod_cl9)
+  cl9_mod1_diagnostics$smr
+  plot(cl9_mod1_diagnostics$nsp_diag)
+  plot(cl9_mod1_diagnostics$resid_env_p)
+  
+  #Model 2: dd ratio ~ irrigatoin*dep + winter crops
+  cl9_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ire_pc_sse_sqrt*INSEE_DEP +
+                   wcr_pc_sse,
+                 data=dat_for_mod_cl9$dat_cast,
+                 weights=dat_for_mod_cl9$dat_cast$bv_area)
+  
+  cl9_mod2_diagnostics <- postprocess_model(in_mod = cl9_mod2,
+                                        in_dat_for_mod = dat_for_mod_cl9,
+                                        spatial_analysis = T)
+  cl9_mod2_diagnostics$smr
+  plot(cl9_mod2_diagnostics$nsp_diag)
+  plot(cl9_mod2_diagnostics$resid_env_p)
+  cl9_mod2_diagnostics$moran_lm
+  cl9_mod2_diagnostics$LMtests
+  
+  cl9_mod2_diagnostics$smr_sem
+  cl9_mod2_pseudoR2 <- cor(cl9_mod2_diagnostics$sem$y, 
+                           cl9_mod2_diagnostics$sem$fitted.values)^2
+  
+  #Model 3: dd ratio ~ irrigatoin*dep + pasture
+  cl9_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ire_pc_sse_sqrt*INSEE_DEP +
+                   pst_pc_sse,
+                 data=dat_for_mod_cl9$dat_cast,
+                 weights=dat_for_mod_cl9$dat_cast$bv_area)
+  
+  cl9_mod3_diagnostics <- postprocess_model(in_mod = cl9_mod3,
+                                        in_dat_for_mod = dat_for_mod_cl9)
+  cl9_mod3_diagnostics$smr
+
+  #Model 4: dd ratio ~ irrigatoin*dep + winter crops + imperviousness
+  cl9_mod4 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ire_pc_sse_sqrt*INSEE_DEP +
+                   wcr_pc_sse + imp_pc_sse,
+                 data=dat_for_mod_cl9$dat_cast,
+                 weights=dat_for_mod_cl9$dat_cast$bv_area)
+  
+  dat_for_mod_cl9$dat_cast[, which(is.na(wcr_pc_sse))]
+  
+  cl9_mod4_diagnostics <- postprocess_model(in_mod = cl9_mod4,
+                                        in_dat_for_mod = dat_for_mod_cl9,
+                                        spatial_analysis=T,
+                                        plot_nbs = T)
+  cl9_mod4_diagnostics$smr
+  vif(cl9_mod4)
+  vif(cl9_mod2)
+  plot(cl9_mod4_diagnostics$nsp_diag)
+  plot(cl9_mod4_diagnostics$resid_env_p)
+  cl9_mod4_diagnostics$moran_lm
+  cl9_mod4_diagnostics$LMtests
+  
+  cl9_mod4_diagnostics$smr_sem
+  cl9_mod4_pseudoR2 <- cor(cl9_mod4_diagnostics$sem$y, 
+                           cl9_mod4_diagnostics$sem$fitted.values)^2
+  
+  #Model 2 and 4 are both good candidates but mod4 has hiher explanatory power.
+  #Model 4 displays a stronger residual spatial autocorrelation. 
+  #VIF of mod4 is only slightly higher than mod2.
+  #Several areas of Nort have very low drainage density in BD Topo and have been 
+  #completed with other sources by DDT, so large differences in ratio
+  cl9_chosen_model <- list(cl9_mod4, cl9_mod4_diagnostics)
+  
+  
+  #Return ----------------------------------------------------------------------
+  return(list(
+   cl1 = cl1_chosenmod,
+   cl2 = cl2_chosenmod,
+   cl3 = cl3_chosenmod,
+   cl4 = cl4_chosenmod,
+   cl5 = cl1_chosenmod,
+   cl6 = cl1_chosenmod,
+   cl7 = cl1_chosenmod,
+   cl8 = cl1_chosenmod,
+   cl9 = cl1_chosenmod
+  ))
 }
 
 
