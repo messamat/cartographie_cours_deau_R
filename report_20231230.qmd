@@ -10,6 +10,7 @@ execute:
 
 ```{r load-data}
 library(data.table)
+library(equatiomatic)
 library(ggplot2)
 library(MASS)
 library(stringr)
@@ -264,7 +265,7 @@ nce_intratio_dep <- dep_stats[!duplicated(INSEE_DEP) &
                                per_nce_determined_regime>0.5 &
                                per_nce>0.01,
                              (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))/
-                               (sum(int_length)/sum(length_ddtnets_tota)),
+                               (sum(int_length)/sum(length_ddtnets_total)),
                              by='INSEE_DEP']
 
 ggplot(nce_intratio_dep, aes(x=V1)) + geom_histogram()
@@ -398,10 +399,24 @@ For each environmental variable, we then visualized the scatterplots for all rel
 #| fig-column: page-right
 #| out-width: 100%
 
-tar_load(envdd_plot_correlations)
-envdd_plot_correlations[[1]]
-envdd_plot_correlations[[2]]
+# tar_load(envdd_plot_correlations)
+# envdd_plot_correlations[[1]]
+# envdd_plot_correlations[[2]]
+
 ```
+
+```{r tabulate_env_dd_mods}
+
+tar_load(mods_envdd)
+
+mod_eqs <- lapply(mods_envdd, function(cl) {
+  equatiomatic::extract_eq(cl[[1]])
+})
+
+eqs_kable <- knitr::kable(mod_eqs)
+```
+
+`r eqs_kable`
 
 ## Coverage of cartography
 
