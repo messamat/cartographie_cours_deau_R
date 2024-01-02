@@ -323,7 +323,7 @@ list(
   
   tar_target(
     env_dd_merged_dep,
-    merge_env_dd_dep (in_drainage_density_summary=drainage_density_summary,
+    merge_env_dd_dep(in_drainage_density_summary=drainage_density_summary,
                       in_env_bv_dt=env_bv_dt)
   ),
   
@@ -353,6 +353,18 @@ list(
     corclus_envdd_bv(in_env_dd_merged_bv=env_dd_merged_bv,
                      in_varnames=varnames,
                      in_bvdep_inters=bvdep_inters_tab)
+  ),
+  
+  tar_target(
+    gclass_tab,
+    fwrite(
+      envdd_multivar_analysis$env_dd_dep_cor_avg_morecl[
+        !duplicated(INSEE_DEP),
+        list(INSEE_DEP=str_pad(as.character(INSEE_DEP), 2, pad = "0"), 
+             gclass=as.character(gclass))],
+      file.path(resdir, 'deps_gclass.csv')
+    ),
+    format='file'
   ),
   
   tar_target(

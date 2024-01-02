@@ -157,7 +157,7 @@ impute_refids_ddtnets <- function(in_ddtnets_path,
     layer = basename(in_ddtnets_path),
     what='attributes'
   )
-
+  
   #--------------------------- Process match with BD topo ----------------------
   #Remove instances of multiple segments with the same pair of DDT and BD Topo segments
   in_ddtnets_bdtopo_polyinters <- in_ddtnets_bdtopo_polyinters[, list(
@@ -169,24 +169,24 @@ impute_refids_ddtnets <- function(in_ddtnets_path,
                          by.x='UID_CE',
                          by.y='UID_CE',
                          all.x=T
-                         ) %>%
+  ) %>%
     .[
       , `:=`(
-      inters_to_bdtopo_ratio = length_inters_bdtopo/length_bdtopo,
-      inters_to_ddt_ratio =length_inters_bdtopo/geom_Length,
-      ddt_to_bdtopo_ratio = geom_Length/length_bdtopo
+        inters_to_bdtopo_ratio = length_inters_bdtopo/length_bdtopo,
+        inters_to_ddt_ratio =length_inters_bdtopo/geom_Length,
+        ddt_to_bdtopo_ratio = geom_Length/length_bdtopo
       )] %>%
     .[!is.infinite(inters_to_bdtopo_ratio) & !is.infinite(inters_to_ddt_ratio),] %>%#Take out records for which the intersection is a single point
     .[,  `:=`(
       max_dev = max(sapply(.SD, function(x) {abs(1-x)})),
       mean_dev = mean(sapply(.SD, function(x) {abs(1-x)}))
-      ),
-      .SDcols = c('inters_to_bdtopo_ratio', 
-                  'inters_to_ddt_ratio', 
-                  'ddt_to_bdtopo_ratio'),
-      by=c('UID_CE', 'ID_bdtopo')] %>%
+    ),
+    .SDcols = c('inters_to_bdtopo_ratio', 
+                'inters_to_ddt_ratio', 
+                'ddt_to_bdtopo_ratio'),
+    by=c('UID_CE', 'ID_bdtopo')] %>%
     .[, inters_diff := abs(inters_to_bdtopo_ratio - inters_to_ddt_ratio)]
-   
+  
   
   # sensitivity_analysis_bdtopo_ddtinters_2 <- lapply(
   #   seq(0.02, 0.4, 0.02), function(thresh) {
@@ -216,16 +216,16 @@ impute_refids_ddtnets <- function(in_ddtnets_path,
   ddtnet_bdtopo_sub <- ddtnet_bdtopo[
     (max_dev < 0.4) | ((abs(1-ddt_to_bdtopo_ratio) < 0.1) & inters_diff < 0.1),] %>%
     .[order(max_dev), .SD[!duplicated(UID_CE)]]
-
+  
   ddtnet_bdtopo_edit <- merge(ddtnet, 
-                             ddtnet_bdtopo_sub[, .(UID_CE, ID_bdtopo)],
-                             by='UID_CE', all.x=T) %>%
+                              ddtnet_bdtopo_sub[, .(UID_CE, ID_bdtopo)],
+                              by='UID_CE', all.x=T) %>%
     as.data.table %>%
     .[grep('^TRON_EAU.*', id), ID_bdtopo_merge := id]
   
   ddtnet_bdtopo_edit[is.na(id) & !is.na(ID_bdtopo),.N] #Added ~700k records
   ddtnet_bdtopo_edit[is.na(ID_bdtopo_merge) & !is.na(ID_bdtopo),
-                    ID_bdtopo_merge := ID_bdtopo] 
+                     ID_bdtopo_merge := ID_bdtopo] 
   ddtnet_bdtopo_edit[
     ,.SD[!is.na(ID_bdtopo_merge) | !is.na(code_hydro), sum(geom_Length)]/
       sum(geom_Length)]
@@ -234,47 +234,47 @@ impute_refids_ddtnets <- function(in_ddtnets_path,
   others <- ddtnet_bdtopo_edit[is.na(ID_bdtopo_merge) & is.na(code_hydro),]
   
   #--------------------------- Process match with BD Carthage ------------------
-    #Remove instances of multiple segments with the same pair of DDT and BD Topo segments
+  #Remove instances of multiple segments with the same pair of DDT and BD Topo segments
   in_ddtnets_carthage_polyinters <- in_ddtnets_carthage_polyinters[, list(
     length_inters_carthage=sum(length_inters_carthage)
   ), by=c('UID_CE', 'ID_carthage', 'length_carthage')]
   
   ddtnet_carthage <- merge(in_ddtnets_carthage_polyinters,
-                         ddtnet,
-                         by.x='UID_CE',
-                         by.y='UID_CE',
-                         all.x=T
-                         ) %>%
+                           ddtnet,
+                           by.x='UID_CE',
+                           by.y='UID_CE',
+                           all.x=T
+  ) %>%
     .[
       , `:=`(
-      inters_to_carthage_ratio = length_inters_carthage/length_carthage,
-      inters_to_ddt_ratio =length_inters_carthage/geom_Length,
-      ddt_to_carthage_ratio = geom_Length/length_carthage
+        inters_to_carthage_ratio = length_inters_carthage/length_carthage,
+        inters_to_ddt_ratio =length_inters_carthage/geom_Length,
+        ddt_to_carthage_ratio = geom_Length/length_carthage
       )] %>%
     .[!is.infinite(inters_to_carthage_ratio) & !is.infinite(inters_to_ddt_ratio),] %>%#Take out records for which the intersection is a single point
     .[,  `:=`(
       max_dev = max(sapply(.SD, function(x) {abs(1-x)})),
       mean_dev = mean(sapply(.SD, function(x) {abs(1-x)}))
-      ),
-      .SDcols = c('inters_to_carthage_ratio', 
-                  'inters_to_ddt_ratio', 
-                  'ddt_to_carthage_ratio'),
-      by=c('UID_CE', 'ID_carthage')] %>%
+    ),
+    .SDcols = c('inters_to_carthage_ratio', 
+                'inters_to_ddt_ratio', 
+                'ddt_to_carthage_ratio'),
+    by=c('UID_CE', 'ID_carthage')] %>%
     .[, inters_diff := abs(inters_to_carthage_ratio - inters_to_ddt_ratio)]
-   
+  
   
   ddtnet_carthage_sub <- ddtnet_carthage[
     (max_dev < 0.2) | ((abs(1-ddt_to_carthage_ratio) < 0.1) & inters_diff < 0.1),] %>%
     .[order(max_dev), .SD[!duplicated(UID_CE)]] %>%
     .[grep('^TRON_EAU.*', id, invert=T),]
-
+  
   ddtnet_carthage_edit <- merge(ddtnet, 
-                             ddtnet_carthage_sub[, .(UID_CE, ID_carthage)],
-                             by='UID_CE', all.x=T) %>%
+                                ddtnet_carthage_sub[, .(UID_CE, ID_carthage)],
+                                by='UID_CE', all.x=T) %>%
     as.data.table
   
   ddtnet_carthage_edit[is.na(id) & !is.na(ID_carthage),.N] #Added >50k records
-
+  
   return(list(
     ddtnet_bdtopo_edit = ddtnet_bdtopo_edit[, .(UID_CE, ID_bdtopo_merge)],
     ddtnet_carthage_edit = ddtnet_carthage_edit[, .(UID_CE, ID_carthage)]
@@ -409,7 +409,7 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
   # )
   
   carthage_cols_to_transfer <- c('ID_BDCARTH', 'ETAT_carthage', 
-                                   'NATURE_carthage', 'TOPONYME1_carthage')
+                                 'NATURE_carthage', 'TOPONYME1_carthage')
   names(in_carthage_bvinters)[
     names(in_carthage_bvinters) 
     %in% c('ID_BDCARTH', 'ETAT', 'NATURE', 'TOPONYME1')] = carthage_cols_to_transfer
@@ -424,9 +424,9 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
       in_ddtnets_refids_imputed$ddtnet_carthage_edit, 
       by='UID_CE', all.x=T) %>%
     merge(in_carthage_bvinters[!duplicated(ID_BDCARTH),  
-                             carthage_cols_to_transfer, with=F],
+                               carthage_cols_to_transfer, with=F],
           by.x='ID_carthage', by.y='ID_BDCARTH', all.x=T)
-
+  
   perrenial_termlist <- c(
     "permanent", "perm. natura", "plein", "pemanent", "continu", "p")      
   intermittent_termlist <- c(
@@ -437,29 +437,29 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
     "continuitãƒâ¯ã‚â¿ã‚â½?ãƒâ¯ã‚â¿", "pointillã¯â¿â½", "i")
   
   ddtnets_bvinters_format[, `:=`(regime = stringr::str_to_lower(regime),
-                             regime2 = stringr::str_to_lower(regime2)
+                                 regime2 = stringr::str_to_lower(regime2)
   )]
   
   ddtnets_bvinters_format[, regime_formatted := 
-                        fcase(ETAT_carthage=='Permanent', 'perennial',
-                              ETAT_carthage=='Intermittent', 'intermittent',
-                              default='undetermined')]
+                            fcase(ETAT_carthage=='Permanent', 'perennial',
+                                  ETAT_carthage=='Intermittent', 'intermittent',
+                                  default='undetermined')]
   
   ddtnets_bvinters_format[!is.na(REGIME_bdtopo_orig) &  
-                        REGIME_bdtopo_orig == 'Permanent',
-                      regime_formatted := 'perennial']
+                            REGIME_bdtopo_orig == 'Permanent',
+                          regime_formatted := 'perennial']
   ddtnets_bvinters_format[!is.na(REGIME_bdtopo_orig) &  
-                        REGIME_bdtopo_orig=='Intermittent',
-                      regime_formatted := 'intermittent']
+                            REGIME_bdtopo_orig=='Intermittent',
+                          regime_formatted := 'intermittent']
   
   ddtnets_bvinters_format[!is.na(regime) &  regime %in% perrenial_termlist,
-                      regime_formatted := 'perennial']
+                          regime_formatted := 'perennial']
   ddtnets_bvinters_format[!is.na(regime) &  regime %in% intermittent_termlist,
-                      regime_formatted := 'intermittent']
+                          regime_formatted := 'intermittent']
   ddtnets_bvinters_format[!is.na(regime2) &  (regime2 %in% perrenial_termlist),
-                      regime_formatted := 'perennial']
+                          regime_formatted := 'perennial']
   ddtnets_bvinters_format[!is.na(regime2) &  (regime2 %in% intermittent_termlist),
-                      regime_formatted := 'intermittent']
+                          regime_formatted := 'intermittent']
   
   # ddtnets_bvinters_format[regime_formatted == 'undetermined', sum(geom_Length)]/
   #   ddtnets_bvinters_format[, sum(geom_Length)]
@@ -468,7 +468,7 @@ format_ddtnets_bvinters <- function(in_ddtnets_bvinters,
   ddtnets_bvinters_format[, orig_dep := as.integer(str_extract(orig_layer, "[0-9]{1,2}"))]
   
   ddtnets_bvinters_format <- ddtnets_bvinters_format[(orig_dep == INSEE_DEP) |
-                                               (INSEE_DEP %in% c(92, 93 ,94)),]
+                                                       (INSEE_DEP %in% c(92, 93 ,94)),]
   
   #For the section of the watercourse that is actually within the department
   #Re-assign "Hors département" to "Indéterminé"
@@ -984,7 +984,7 @@ evaluate_onde_coverage <- function(in_onde_ddtnets_spjoin,
           by='UID_CE',
           all.x=T) %>%
     unique(by=c('CoordXSiteHydro', 'CoordYSiteHydro'))
-
+  
   onde_deleted_segments <- onde_ddtnets_join[
     CdSiteHydro  %in% 
       c('M1060001', 'M1050001', 'F4620002', 'P1130001', 'P3110001', 'P1560002',
@@ -1037,7 +1037,7 @@ evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin,
     merge(stations, by.x = 'pop_sta_id', by.y='sta_id', all.x=T) %>%
     merge(operation, by.x='pop_id', by.y='ope_pop_id', all.x=F) %>%
     merge(operation_ipr, by.x = 'ope_id', by.y='opi_ope_id',all.x=T)
-    
+  
   # word_vec <- lapply(stations$sta_libelle_sandre, function(s) {
   #   str_split(str_to_lower(gsub('"',"", gsub("'", "", s))), pattern='[,; ]')
   # }) %>% unlist %>% table %>% as.data.table
@@ -1052,12 +1052,12 @@ evaluate_fish_coverage <- function(in_fish_ddtnets_spjoin,
   fish_ddtnets_join_sub <- fish_ddtnets_join[
     grep(regex, sta_libelle_sandre, ignore.case=T, invert=T),] %>%
     .[grep(regex, pop_libelle_wama, ignore.case=T, invert=T),]
-
+  
   #Use site name BD Topo name, Carthage, satellite imagery when unsure that a stream actually exists
   #Only count those where a BD Topo + satellite imagery confirm potential for channel
   #Exclude any site called fossé, roubine, craste, canal. Check at leastg 50 m
   #Remove all those when counting too. lac, étang, réservoir, rade, ballastière, 
- #barrage, derivation, retenue, complexe, annexe, gravieres, derivation, pompage, prise d'eau
+  #barrage, derivation, retenue, complexe, annexe, gravieres, derivation, pompage, prise d'eau
   #bief, 
   
   fish_deleted_segments <-  fish_ddtnets_join_sub[
@@ -1123,7 +1123,7 @@ evaluate_hydrobio_coverage <- function(in_hydrobio_ddtnets_spjoin,
     unique(by=c('CoordXStationMesureEauxSurfa_6', 
                 'CoordYStationMesureEauxSurfa_7')) %>%
     .[(INSEE_DEP != 76) & (CodeTypEthStationMesureEauxS_27 != 1),]  #Exclude Charente-Maritimes and standing water bodies
-
+  
   regex <- paste(c(
     "canal", "foss[eé]", "roubine", "craste", "lac", "[eé]tang","r[ée]servoir",
     "rade", "chenal", "ballasti[eè]re", "barrage", "d[ée]rivation", "retenue", 
@@ -1134,7 +1134,7 @@ evaluate_hydrobio_coverage <- function(in_hydrobio_ddtnets_spjoin,
   
   hydrobio_ddtnets_join_sub <- hydrobio_ddtnets_join[
     grep(regex, LbStationMesureEauxSurface, ignore.case=T, invert=T),]
-
+  
   #Manual checking Hydrobio fish stations that are on a BD Topo or BD Carthage segment but not on a DDT segment by looking at all those
   #beyong 50 m from a DDT segment + Manual checking DCE hydrobio sites whose closest segment is a non-watercourse:
   #Excluded even channelized rivers that originally were flowing in a natural bed 
@@ -1144,14 +1144,14 @@ evaluate_hydrobio_coverage <- function(in_hydrobio_ddtnets_spjoin,
       c('04164950', '04306005', '05068475', '02093200', '04362016', '05225085', 
         '05225090', '03149229', '04401016', '03269250', '03189652', '03149223', 
         '04379004', '02042865', '02118748', '03207021', '04371012')] #03035734 was erased by a field
-
+  
   hydrobio_nce_segments <-    hydrobio_ddtnets_join_sub[
     CdStationMesureEauxSurface  %in% 
       c('02098396', '02098397', '02098398', '03006417', '03006590', '03011740',
         '03014470', '04431025', '05234025', '06011900', '06011965', '06048420',
         '06590892', '06830132'
       )] #'04441014' - bief de moulin # '06580359' erased by a field
-        
+  
   return(list(
     attris_ddtnets_sub = hydrobio_ddtnets_join_sub,
     deleted_segments = hydrobio_deleted_segments,
@@ -1186,11 +1186,11 @@ evaluate_effort <- function(in_ddtnets_bvinters,
                            measure.vars=names(in_nat_id_cats)) %>%
     .[nat_id_std=='V9', nat_id := NA] %>%
     .[nat_id != '',]
-
+  
   
   ddtnets_nat_id <- merge(in_ddtnets_bvinters, nat_id_cats_melt, 
                           by='nat_id', all.x=T)[
-    , c('UID_BV', 'INSEE_DEP', 'nat_id', 'nat_id_std', 'geom_Length'), with=F]
+                            , c('UID_BV', 'INSEE_DEP', 'nat_id', 'nat_id_std', 'geom_Length'), with=F]
   
   ddtnets_nat_id[str_split_i(nat_id, " ", 1)=='visite', nat_id_std := 'terrain']
   
@@ -1225,36 +1225,10 @@ summarize_drainage_density <- function(in_ddtnets_stats,
   
   
   #Compute statistics for BV level (catchment) ----------------------------------
-  
-  #Compute the length of non-perennial segments classified as non-watercourse
-  #and the ratio between the share of non-perennial segments classified as non-watercourse
-  #to the share of non-perennial segments in the BV (to control for differences 
-  #in non-perennial segment prevalence)
-  int_nce_stats_bv <-   in_ddtnets_stats[, `:=`(
-    int_length = .SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
-    nce_int_length = .SD[type_stand=="Non cours d'eau" & 
-                           regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
-    per_nce_determined_regime = .SD[regime_formatted != 'undetermined' & 
-                                      type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]/
-      .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)],
-    per_nce_intratio = (
-      .SD[type_stand=="Non cours d'eau" & regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
-        .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]
-    )/
-      (.SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
-         .SD[, sum(length_cat_bv, na.rm=T)])
-  ), by='UID_BV']
-  
-  
   ddtnets_stats <-  dcast(in_ddtnets_stats, 
                           as.formula(paste(paste(id_cols, collapse='+'),
                                            '~type_stand')),
                           value.var='length_cat_bv', fun.aggregate=sum) %>%
-    merge(int_nce_stats_bv[!duplicated(UID_BV), 
-                           .(UID_BV, total_length_bv, per_int,
-                             per_ce, per_ind, per_nce, 
-                             int_length, nce_int_length,per_nce_determined_regime, 
-                             per_nce_intratio)], by='UID_BV') %>%
     setnames(c("Cours d'eau", "Indéterminé", "Inexistant", "Non cours d'eau"),
              c('length_bv_ce', 'length_bv_ind', 'length_bv_inx', 'length_bv_nce'))
   
@@ -1303,7 +1277,7 @@ summarize_drainage_density <- function(in_ddtnets_stats,
     ) %>%
       .[INSEE_DEP %in% c(6, 8, 12, 28, 31, 35, 76, 88),]
   }
-
+  
   #Compute statistics for HydroBASINS level 8-----------------------------------
   # nets_stats_melt_b8 <-nets_stats_melt[, list(
   #   length_ddtnets_ce = sum(length_bv_ce_ddtnets, na.rm=T),
@@ -1314,24 +1288,6 @@ summarize_drainage_density <- function(in_ddtnets_stats,
   #   .[, length_ddtnets_ceind := length_ddtnets_ce + length_ddtnets_ind]
   
   #Compute statistics for departments ------------------------------------------
-  #Compute IRES representativeness at the department level
-  int_nce_stats_dep <-   in_ddtnets_stats[
-    !(UID_BV %in% nodata_bvs$UID_BV), list(
-      per_nce_determined_regime = .SD[regime_formatted != 'undetermined' & 
-                                        type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]/
-        .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)],
-      int_length = .SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
-      nce_int_length = .SD[type_stand=="Non cours d'eau" & 
-                             regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
-      per_nce_intratio = (
-        .SD[type_stand=="Non cours d'eau" & regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
-          .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]
-      )/
-        (.SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
-           .SD[, sum(length_cat_bv, na.rm=T)])
-    ), by='INSEE_DEP']
-  
-  #Compute general statistics
   nets_stats_melt_dep <-nets_stats_melt[
     !(UID_BV %in% nodata_bvs$UID_BV),
     list(
@@ -1362,8 +1318,7 @@ summarize_drainage_density <- function(in_ddtnets_stats,
       lengthratio_ddt_ceind_to_bdtopo_standardized=lengthratio_ddt_ceind_to_other_standardized,
       INSEE_DEP = INSEE_DEP
     )],
-    by=c('INSEE_DEP')) %>%
-    merge(int_nce_stats_dep, by='INSEE_DEP')
+    by=c('INSEE_DEP'))
   
   #Compute drainage density ratios at the bv level -----------------------------
   nets_stats_merged_bv[, `:=`(
@@ -1560,34 +1515,6 @@ plot_envdd_dep <- function(in_drainage_density_summary,
     theme_bw() +
     theme(axis.text.x = element_text(angle=90))
   
-  #Bar chart of intermittent-river representativeness
-  p_intratio_bars_dep <- ggplot(
-    dep_stats[!duplicated(INSEE_DEP) & 
-                per_nce_determined_regime>0.5 &
-                per_nce>0.01,],
-    aes(x=reorder(INSEE_DEP,per_nce_intratio),
-        y=per_nce_intratio,
-        fill=nce_int_length/1000
-    )) +
-    geom_bar(stat='identity') +
-    geom_hline(yintercept=1) +
-    scale_x_discrete(name='Department number') +
-    scale_y_continuous(
-      name='Representativeness of intermittent rivers in segments classified as non-watercourses', 
-      expand=c(0,0)) +
-    scale_fill_distiller(name=str_wrap('Length of intermittent rivers classified
-                                       as non-watercourses (km)', 30),
-                         palette='Spectral', trans = "sqrt",
-                         breaks=c(2, 100, 500, 1000, 2000, 6000))+
-    #geom_text(aes(label=INSEE_DEP)) +
-    coord_flip() +
-    theme_bw() +
-    theme(
-      panel.grid.minor = element_blank(),
-      legend.position=c(0.8,0.2),
-      legend.background = element_blank()
-    )
-  
   #------------------------- Plots of drivers of drainage density deviation -----------
   driver_cols_dt <- data.table(
     driver=c('agr_pc_sse'
@@ -1768,7 +1695,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     n_bvs = .SD[!is.na(value), .N])
     , by=c("INSEE_DEP", "NOM", "description")] %>%
     .[n_bvs>10,] #Removing those departments with 10 or less bvs (really only removes those with 5 or less)
-      
+  
   excluded_deps <- env_dd_melt[!(NOM %in% env_dd_dep_cor$NOM), unique(NOM)]
   
   #NAs are due to several reasons:
@@ -1861,19 +1788,19 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Make table of gauge classes and good looking dendogram
   env_dd_dendo_avg_lesscl <-prettydend(hclus_out = env_dd_dep_hclust_avg, 
-                                    kclass=5, colors=classcol,
-                                    classnames= NULL)
+                                       kclass=5, colors=classcol,
+                                       classnames= NULL)
   env_dd_dendo_avg_morecl <-prettydend(hclus_out = env_dd_dep_hclust_avg, 
-                                    kclass=9, colors=classcol,
-                                    classnames= NULL)
+                                       kclass=9, colors=classcol,
+                                       classnames= NULL)
   p_dendo_avg_lesscl <- env_dd_dendo_avg_lesscl[[2]]
   p_dendo_avg_morecl <- env_dd_dendo_avg_morecl[[2]]
   
   
   env_dd_dep_cor_avg_lesscl <- merge(env_dd_dep_cor, env_dd_dendo_avg_lesscl[[1]],
-                                  by.x='NOM', by.y='ID')
+                                     by.x='NOM', by.y='ID')
   env_dd_dep_cor_avg_morecl <- merge(env_dd_dep_cor, env_dd_dendo_avg_morecl[[1]],
-                                  by.x='NOM', by.y='ID')
+                                     by.x='NOM', by.y='ID')
   
   p_cluster_boxplot_avg_lesscl <- ggplot(
     env_dd_dep_cor_avg_lesscl, 
@@ -1895,29 +1822,29 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   #Make table of gauge classes and good looking dendogram
   env_dd_dendo_ward_lesscl <-prettydend(hclus_out = env_dd_dep_hclust_ward, 
-                                     kclass=5, colors=classcol,
-                                     classnames= NULL)
+                                        kclass=5, colors=classcol,
+                                        classnames= NULL)
   env_dd_dendo_ward_morecl <-prettydend(hclus_out = env_dd_dep_hclust_ward, 
-                                     kclass=10, colors=classcol,
-                                     classnames= NULL)
+                                        kclass=10, colors=classcol,
+                                        classnames= NULL)
   p_dendo_ward_lesscl <- env_dd_dendo_ward_lesscl[[2]]
   p_dendo_ward_morecl <- env_dd_dendo_ward_morecl[[2]]
   
   env_dd_dep_cor_ward_lesscl <- merge(env_dd_dep_cor, env_dd_dendo_ward_lesscl[[1]],
-                                   by.x='NOM', by.y='ID')
+                                      by.x='NOM', by.y='ID')
   
   p_cluster_boxplot_ward_lesscl <- ggplot(env_dd_dep_cor_ward_lesscl, 
-                                    aes(x=factor(gclass), y=cor, color=factor(gclass))) +
+                                          aes(x=factor(gclass), y=cor, color=factor(gclass))) +
     geom_boxplot() +
     geom_jitter(color="black", size=0.4, alpha=0.9) +
     geom_hline(yintercept=0) +
     facet_wrap(~description)
   
   env_dd_dep_cor_ward_morecl <- merge(env_dd_dep_cor, env_dd_dendo_ward_morecl[[1]],
-                                   by.x='NOM', by.y='ID')
+                                      by.x='NOM', by.y='ID')
   
   p_cluster_boxplot_ward_morecl <- ggplot(env_dd_dep_cor_ward_morecl, 
-                                    aes(x=factor(gclass), y=cor, color=factor(gclass))) +
+                                          aes(x=factor(gclass), y=cor, color=factor(gclass))) +
     geom_boxplot() +
     geom_jitter(color="black", size=0.4, alpha=0.9) +
     geom_hline(yintercept=0) +
@@ -1945,7 +1872,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
     theme(legend.position = c(0.8, 0.3))
   
   var_cor_gclass_preformat <- merge(dt_sub, env_dd_dendo_avg_morecl[[1]], 
-                          by.x='NOM_DEP', by.y='ID') %>%
+                                    by.x='NOM_DEP', by.y='ID') %>%
     .[, c(as.character(driver_cols_dt$variable), 'gclass'), with=F] %>%
     setnames(c(as.character(driver_cols_dt$description), 'gclass')) %>%
     setnames(gsub("water withdrawals", "ww", names(.))) %>%
@@ -1954,9 +1881,9 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   
   var_cor_byclass <- lapply(unique(var_cor_gclass_preformat$gclass), 
                             function(class) {
-    cor(var_cor_gclass_preformat[gclass==class,],
-        method='spearman', use="pairwise.complete.obs")
-  })
+                              cor(var_cor_gclass_preformat[gclass==class,],
+                                  method='spearman', use="pairwise.complete.obs")
+                            })
   names(var_cor_byclass) = unique(var_cor_gclass_preformat$gclass)
   
   #By department
@@ -1997,7 +1924,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
   class_colors_ward_morecl <- classcol[as.data.table(
     env_dd_dendo_ward_morecl[[1]])[order(gclass, ID),gclass]]
   
-
+  
   env_ddratio_corheatmap_ward_morecl <- 
     ggcorrplot(env_dd_dep_cormat_ward_morecl, #method = "circle", 
                #hc.order = TRUE, hc.method = 'average',
@@ -2035,7 +1962,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
 
 
 #-------------------------- build env-dd models ---------------------------------
-# in_envdd_multivar_analysis=tar_read(envdd_multivar_analysis)
+#in_envdd_multivar_analysis=tar_read(envdd_multivar_analysis)
 # in_drainage_density_summary=tar_read(drainage_density_summary)
 # in_bvdep_inters_gdb_path=tar_read(bvdep_inters_gdb_path)
 
@@ -2051,8 +1978,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   env_dd_melt_gclass <- merge(
     in_envdd_multivar_analysis$env_dd_melt, #BV-level data on drainage density ratio and socio-env stats
     in_envdd_multivar_analysis$env_dd_dep_cor_avg_morecl[!duplicated(INSEE_DEP), #class of each bv
-                                                      c('INSEE_DEP', 'gclass'),
-                                                      with=F],
+                                                         c('INSEE_DEP', 'gclass'),
+                                                         with=F],
     by='INSEE_DEP') %>%
     merge(in_envdd_multivar_analysis$env_dd_dep_cor[ #Spearman correlation between variables and drainage density ratio
       ,c('INSEE_DEP', 'description', 'cor'), with=F],
@@ -2098,7 +2025,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     ww_cols = grep("vww_mk_syr", names(env_dd_cast_sub), value=T)
     ww_cols_log = paste0(ww_cols, '_log')
     env_dd_cast_sub[, (ww_cols_log) := sapply(.SD, function(x) log10(x+10),
-                                               simplify=F), 
+                                              simplify=F), 
                     .SDcols = ww_cols]
     env_dd_cast_sub[, (ww_cols) := NULL]
     
@@ -2125,10 +2052,10 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  alpha=1/3) +
       geom_smooth(aes(weight=bv_area,
                       color=factor(INSEE_DEP)),
-        method='gam',
-        #family='lognormal',
-        formula = y ~ s(x, bs = "cs", fx = TRUE, k =3),
-        se=F)+
+                  method='gam',
+                  #family='lognormal',
+                  formula = y ~ s(x, bs = "cs", fx = TRUE, k =3),
+                  se=F)+
       geom_smooth(aes(weight=bv_area),
                   method='gam',
                   #family='lognormal',
@@ -2170,33 +2097,42 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     ))
   }
   
-  # in_mod <- cl9_mod4
-  # in_dat_for_mod <- dat_for_mod_cl9
+  # in_mod <- cl1_mod0
+  # in_dat_for_mod <- dat_for_mod_cl1
   # plot_nbs=T
   # removed_index=NULL
-
+  
   postprocess_model <- function(in_mod, in_dat_for_mod, 
                                 spatial_analysis = F,
                                 plot_nbs=F, removed_index=NULL)  {
     
     in_dat <- in_dat_for_mod$dat_cast
     if (!is.null(removed_index)) {
-      in_dat <- in_dat[!removed_index,]
+      UID_BV_to_remove <- in_dat[removed_index, UID_BV]
+      in_dat <- in_dat[!(UID_BV %in% UID_BV_to_remove),]
     }
-    in_dat_sp <- in_dat_for_mod$dat_sp[
-      !(seq_along(in_dat_for_mod$dat_sp$UID_BV) %in% removed_index),]  
+    in_dat_sp <- in_dat_for_mod$dat_sp
+    if (!is.null(removed_index)) {
+      in_dat_sp <- in_dat_sp[
+        !(in_dat_for_mod$dat_sp$UID_BV %in% UID_BV_to_remove),]  
+    }
     
     id_vars <- in_dat_for_mod$id_vars
-
+    
     smr <- summary(in_mod)
     #dat_copy<- copy(in_dat) 
     mod_name <- paste(names(in_mod$model)[2:length(names(in_mod$model))], 
                       collapse='_') %>%
       gsub("_[(]weights[)]", "", .)
     res_name <- paste('residuals', mod_name, sep="_")
-
+    
     #Check distributions of residuals
-    nsp_diag <- gg_diagnose(in_mod)
+    if (length(in_mod$coefficients)>1) {
+      nsp_diag <- gg_diagnose(in_mod)
+    } else {
+      nsp_diag <- NULL
+    }
+
     
     #Check correlations of other variables with residuals
     in_dat[, (res_name) := residuals(in_mod)]
@@ -2205,7 +2141,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     resid_env_p<- ggplot(melt(in_dat, 
                               id.vars=c(id_vars, 
                                         res_name)),
-           aes(x=value, y=get(res_name))) +
+                         aes(x=value, y=get(res_name))) +
       geom_point(aes(color=factor(INSEE_DEP),
                      size=bv_area), alpha=1/3) +
       geom_smooth(method='lm', se=F,
@@ -2215,6 +2151,16 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                   aes(weight=bv_area)) +
       facet_wrap(~variable, scales='free_x') +
       theme_bw()
+    
+    MAE = list(
+      lm = mae(in_mod$model$ddt_to_bdtopo_ddratio_ceind,
+               in_mod$fitted.values)
+    )
+    
+    MAPE = list(
+      lm = mape(in_mod$model$ddt_to_bdtopo_ddratio_ceind,
+                in_mod$fitted.values)
+    )
     
     #Check spatial autocorrelation of residuals
     if (spatial_analysis) {
@@ -2270,6 +2216,15 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
       # resids_sp$resid_lagm <- lagm$residuals
       # spplot(resids_sp, "resid_lagm", main = "Residuals")
       
+      #Compute mean absolute error
+      MAE$sem = mae(sem$y, sem$fitted.values)
+      MAE$lagm = mae(lagm$y, lagm$fitted.values)
+      
+      
+      #Compute mean absolute percentage error
+      MAPE$sem = mape(sem$y, sem$fitted.values)
+      MAPE$lagm = mape(lagm$y, lagm$fitted.values)
+      
       return(list(
         smr=smr,
         nsp_diag=nsp_diag,
@@ -2283,7 +2238,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
         sem = sem,
         smr_sem = smr_sem,
         lagm = lagm,
-        smr_lagm = smr_lagm
+        smr_lagm = smr_lagm,
+        MAE = MAE,
+        MAPE = MAPE
       ))
     } else {
       return(list(
@@ -2299,7 +2256,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
         sem = NULL,
         smr_sem = NULL,
         lagm = NULL,
-        smr_lagm = NULL
+        smr_lagm = NULL,
+        MAE = MAE,
+        MAPE = MAPE
       ))
     }
   }
@@ -2321,6 +2280,13 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     geom_point() +
     geom_smooth(method='lm')
   
+  #Model 0: dd ratio ~ mean
+  cl1_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind ~ 1,
+                 data=dat_for_mod_cl1$dat_cast)
+  cl1_mod0_diagnostics <- postprocess_model(in_mod = cl1_mod0,
+                                            in_dat = dat_for_mod_cl1,
+                                            spatial_analysis = F)
+  
   #Model 1: dd ratio ~ slope
   cl1_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~slo_dg_sav,
                  data=dat_for_mod_cl1$dat_cast)
@@ -2341,12 +2307,12 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                                             in_dat = dat_for_mod_cl1,
                                             spatial_analysis = F)
   cl1_mod2_diagnostics$smr #slope is not significant, agriculture is
-
+  
   
   #Model 3: dd ratio ~ agriculture
   cl1_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind~agr_pc_sse, 
                  data=dat_for_mod_cl1$dat_cast)
-
+  
   cl1_mod3_diagnostics <- postprocess_model(in_mod = cl1_mod3,
                                             in_dat = dat_for_mod_cl1,
                                             spatial_analysis = T)
@@ -2375,9 +2341,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
          id.vars=c('UID_BV', 'slo_dg_sav'),
          measure.vars = c('bdtopo', 'total_length_bv_ddtnets')),
     aes(x=slo_dg_sav, y=value)) +
-    geom_point() +
-    geom_smooth(method='gam') +
-    facet_wrap(~variable))/
+      geom_point() +
+      geom_smooth(method='gam') +
+      facet_wrap(~variable))/
     (ggplot(
       melt(dat_for_mod_cl1$dat_cast, 
            id.vars=c('UID_BV', 'agr_pc_sse'),
@@ -2387,7 +2353,10 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
        geom_smooth(method='gam') +
        facet_wrap(~variable))
   
-  cl1_chosen_model <- list(cl1_mod3, cl1_mod3_diagnostics)
+  #Chosen model, diagnostics, null model
+  cl1_chosen_model <- list(cl1_mod3, cl1_mod3_diagnostics, 
+                           cl1_mod0, cl1_mod0_diagnostics)
+  
   #Agricultural area is more strongly correlated to drainage density ratio
   #but slope is also strongly related. Other correlated include aridity, etc.
   #These all show a spatial gradient from east to west of the department
@@ -2396,7 +2365,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   #density in the higher slope-lower agriculture-wetter part of the department 
   #in bdtopo — most first-order and several second-order streams were removed
   #in those areas. Probably considered mountain gullies.
- 
+  
   #Class 2 model - Loire-et-Cher -----------------------------------------------
   print('Selecting model for class 2')
   
@@ -2407,13 +2376,20 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     in_gclass=2) 
   
   dat_for_mod_cl2$ddratio_env_plot
-
+  
   ggplot(dat_for_mod_cl2$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
     geom_histogram() 
   ggplot(dat_for_mod_cl2$dat_cast, 
          aes(x=wcr_pc_sse, y=ddt_to_bdtopo_ddratio_ceind)) +
     geom_point() +
     geom_smooth(method='lm')
+  
+  #Model 0: dd ratio ~ mean
+  cl2_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~1,
+                 data=dat_for_mod_cl2$dat_cast)
+  cl2_mod0_diagnostics <- postprocess_model(in_mod = cl2_mod0,
+                                            in_dat = dat_for_mod_cl2,
+                                            spatial_analysis = F)
   
   #Model 1: dd ratio ~ winter crops
   cl2_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse,
@@ -2442,7 +2418,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   plot(cl2_mod2_diagnostics$nsp_diag)
   plot(cl2_mod2_diagnostics$resid_env_p)
   #mod2_diagnostics$resids_sp_p
-
+  
   cl2_mod2_diagnostics$LMtests
   
   #Model 3: dd ratio ~ predicted intermittency after removing outlier (0 ce or ind)
@@ -2455,7 +2431,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   cl2_mod3_diagnostics$smr
   plot(cl2_mod3_diagnostics$nsp_diag)
   
-  cl2_chosen_model <- list(cl2_mod2, cl2_mod2_diagnostics)
+  cl2_chosen_model <- list(cl2_mod2, cl2_mod2_diagnostics, 
+                           cl2_mod0, cl2_mod0_diagnostics)
   #Winter crops is the main explanation for differences in drainage density across
   #the department. No residual correlation with other variables
   #No residual spatial autocorrelation.
@@ -2487,15 +2464,16 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   cl3_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
                  data=dat_for_mod_cl3$dat_cast,
                  weights=dat_for_mod_cl3$dat_cast$bv_area)
-  summary(cl3_mod0)
+  cl3_mod0_diagnostics <- postprocess_model(in_mod = cl3_mod0,
+                                            in_dat_for_mod = dat_for_mod_cl3)
   
   #Model 1: dd ratio ~ winter crops + dep
   cl3_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt + INSEE_DEP,
                  data=dat_for_mod_cl3$dat_cast,
                  weights=dat_for_mod_cl3$dat_cast$bv_area)
-
+  
   cl3_mod1_diagnostics <- postprocess_model(in_mod = cl3_mod1,
-                                        in_dat_for_mod = dat_for_mod_cl3)
+                                            in_dat_for_mod = dat_for_mod_cl3)
   cl3_mod1_diagnostics$smr
   plot(cl3_mod1_diagnostics$nsp_diag)
   plot(cl3_mod1_diagnostics$resid_env_p)
@@ -2507,7 +2485,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     weights=dat_for_mod_cl3$dat_cast$bv_area)
   
   cl3_mod2_diagnostics <- postprocess_model(in_mod = cl3_mod2,
-                                        in_dat_for_mod = dat_for_mod_cl3)
+                                            in_dat_for_mod = dat_for_mod_cl3)
   cl3_mod2_diagnostics$smr
   plot(cl3_mod2_diagnostics$nsp_diag)
   plot(cl3_mod2_diagnostics$resid_env_p)
@@ -2520,7 +2498,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     weights = dat_for_mod_cl3$dat_cast$bv_area)
   
   cl3_mod3_diagnostics <- postprocess_model(in_mod = cl3_mod3,
-                                        in_dat_for_mod = dat_for_mod_cl3)
+                                            in_dat_for_mod = dat_for_mod_cl3)
   cl3_mod3_diagnostics$smr
   plot(cl3_mod3_diagnostics$nsp_diag)
   plot(cl3_mod3_diagnostics$resid_env_p)
@@ -2533,7 +2511,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   summary(cl3_mod4)
   
   cl3_mod4_diagnostics <- postprocess_model(in_mod = cl3_mod4,
-                                        in_dat_for_mod = dat_for_mod_cl3)
+                                            in_dat_for_mod = dat_for_mod_cl3)
   cl3_mod4_diagnostics$smr
   plot(cl3_mod4_diagnostics$nsp_diag)
   plot(cl3_mod4_diagnostics$resid_env_p)
@@ -2546,10 +2524,10 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
       ire_pc_sse*INSEE_DEP,
     data = dat_for_mod_cl3$dat_cast,
     weights = dat_for_mod_cl3$dat_cast$bv_area)
-
+  
   cl3_mod5_diagnostics <- postprocess_model(in_mod = cl3_mod5,
-                                        in_dat_for_mod = dat_for_mod_cl3,
-                                        spatial_analysis=T)
+                                            in_dat_for_mod = dat_for_mod_cl3,
+                                            spatial_analysis=T)
   vif(cl3_mod5)
   cl3_mod5_diagnostics$smr
   plot(cl3_mod5_diagnostics$nsp_diag)
@@ -2568,8 +2546,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   vif(cl3_mod6)
   
   cl3_mod6_diagnostics <- postprocess_model(in_mod = cl3_mod6,
-                                        in_dat_for_mod = dat_for_mod_cl3,
-                                        spatial_analysis=F)
+                                            in_dat_for_mod = dat_for_mod_cl3,
+                                            spatial_analysis=F)
   cl3_mod6_diagnostics$smr
   plot(cl3_mod6_diagnostics$nsp_diag)
   plot(cl3_mod6_diagnostics$resid_env_p)
@@ -2586,8 +2564,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
     weights = dat_for_mod_cl3$dat_cast$bv_area)
   
   summary(cl3_mod7)
-
-  cl3_chosen_model <- list(cl3_mod5, cl3_mod5_diagnostics)
+  
+  cl3_chosen_model <- list(cl3_mod5, cl3_mod5_diagnostics, 
+                           cl3_mod0, cl3_mod0_diagnostics)
   #The chosen model is the fifth:
   # ddt_to_bdtopo_ddratio_ceind ~ wcr_pc_sse_sqrt*INSEE_DEP +
   #                               orc_pc_sse + vny_pc_sse +
@@ -2625,7 +2604,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   cl4_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
                  data=dat_for_mod_cl4$dat_cast,
                  weights=dat_for_mod_cl4$dat_cast$bv_area)
-  summary(cl4_mod0)
+  cl4_mod0_diagnostics <- postprocess_model(in_mod = cl4_mod0,
+                                            in_dat_for_mod = dat_for_mod_cl4)
   
   #Model 1: dd ratio ~ winter crops + dep
   cl4_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt + INSEE_DEP,
@@ -2633,7 +2613,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl4$dat_cast$bv_area)
   
   cl4_mod1_diagnostics <- postprocess_model(in_mod = cl4_mod1,
-                                        in_dat_for_mod = dat_for_mod_cl4)
+                                            in_dat_for_mod = dat_for_mod_cl4)
   cl4_mod1_diagnostics$smr
   plot(cl4_mod1_diagnostics$nsp_diag)
   plot(cl4_mod1_diagnostics$resid_env_p)
@@ -2644,7 +2624,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl4$dat_cast$bv_area)
   
   cl4_mod2_diagnostics <- postprocess_model(in_mod = cl4_mod2,
-                                        in_dat_for_mod = dat_for_mod_cl4)
+                                            in_dat_for_mod = dat_for_mod_cl4)
   cl4_mod2_diagnostics$smr
   plot(cl4_mod2_diagnostics$nsp_diag)
   plot(cl4_mod2_diagnostics$resid_env_p)
@@ -2655,7 +2635,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl4$dat_cast$bv_area)
   
   cl4_mod3_diagnostics <- postprocess_model(in_mod = cl4_mod3,
-                                        in_dat_for_mod = dat_for_mod_cl4)
+                                            in_dat_for_mod = dat_for_mod_cl4)
   cl4_mod3_diagnostics$smr
   plot(cl4_mod3_diagnostics$nsp_diag)
   plot(cl4_mod3_diagnostics$resid_env_p)
@@ -2666,7 +2646,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl4$dat_cast$bv_area)
   
   cl4_mod4_diagnostics <- postprocess_model(in_mod = cl4_mod4,
-                                        in_dat_for_mod = dat_for_mod_cl4)
+                                            in_dat_for_mod = dat_for_mod_cl4)
   cl4_mod4_diagnostics$smr
   plot(cl4_mod4_diagnostics$nsp_diag)
   plot(cl4_mod4_diagnostics$resid_env_p)
@@ -2676,9 +2656,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                    wcr_pc_sse_sqrt*INSEE_DEP,
                  data=dat_for_mod_cl4$dat_cast,
                  weights=dat_for_mod_cl4$dat_cast$bv_area)
-
+  
   cl4_mod5_diagnostics <- postprocess_model(in_mod = cl4_mod5,
-                                        in_dat_for_mod = dat_for_mod_cl4)
+                                            in_dat_for_mod = dat_for_mod_cl4)
   cl4_mod5_diagnostics$smr
   plot(cl4_mod5_diagnostics$nsp_diag)
   plot(cl4_mod5_diagnostics$resid_env_p)
@@ -2690,7 +2670,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl4$dat_cast$bv_area)
   
   cl4_mod6_diagnostics <- postprocess_model(in_mod = cl4_mod6,
-                                        in_dat_for_mod = dat_for_mod_cl4)
+                                            in_dat_for_mod = dat_for_mod_cl4)
   cl4_mod6_diagnostics$smr
   plot(cl4_mod6_diagnostics$nsp_diag)
   plot(cl4_mod6_diagnostics$resid_env_p)
@@ -2709,13 +2689,14 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl4$dat_cast$bv_area)
   
   cl4_mod7_diagnostics <- postprocess_model(in_mod = cl4_mod7,
-                                        in_dat_for_mod = dat_for_mod_cl4)
+                                            in_dat_for_mod = dat_for_mod_cl4)
   cl4_mod7_diagnostics$smr
   plot(cl4_mod7_diagnostics$nsp_diag)
   plot(cl4_mod7_diagnostics$resid_env_p)
   #Too much becomes insignificant
   
-  cl4_chosen_model <- list(cl4_mod6, cl4_mod6_diagnostics)
+  cl4_chosen_model <- list(cl4_mod6, cl4_mod6_diagnostics,
+                           cl4_mod0, cl4_mod0_diagnostics)
   
   #Class 5 model - 60 departments ----------------------------------------------
   print('Selecting model for class 5')
@@ -2751,7 +2732,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   cl5_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
                  data=dat_for_mod_cl5$dat_cast,
                  weights=dat_for_mod_cl5$dat_cast$bv_area)
-  summary(cl5_mod0)
+  cl5_mod0_diagnostics <- postprocess_model(in_mod = cl5_mod0,
+                                            in_dat_for_mod = dat_for_mod_cl5)
   
   #Model 1: dd ratio ~ winter crops + dep
   cl5_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt + INSEE_DEP,
@@ -2772,10 +2754,10 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  data=dat_for_mod_cl5$dat_cast,
                  weights=dat_for_mod_cl5$dat_cast$bv_area)
   summary(cl5_mod3)
-
+  
   cl5_mod3_diagnostics <- postprocess_model(in_mod = cl5_mod3,
-                                        in_dat_for_mod = dat_for_mod_cl5,
-                                        spatial_analysis = F)
+                                            in_dat_for_mod = dat_for_mod_cl5,
+                                            spatial_analysis = F)
   cl5_mod3_diagnostics$smr
   plot(cl5_mod3_diagnostics$nsp_diag)
   plot(cl5_mod3_diagnostics$resid_env_p)
@@ -2787,7 +2769,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl5$dat_cast$bv_area)
   summary(cl5_mod4)
   
-  cl5_chosen_model <- list(cl5_mod3, cl5_mod3_diagnostics)
+  cl5_chosen_model <- list(cl5_mod3, cl5_mod3_diagnostics,
+                           cl5_mod0, cl5_mod0_diagnostics)
   #############NMOD 3 is chosen. need to finish diagnostics, but launch it when got time
   
   
@@ -2822,13 +2805,15 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   
   dat_for_mod_cl6$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
   dat_for_mod_cl6$dat_cast[, pst_pc_sse_sqrt := sqrt(pst_pc_sse)]
-  #dat_for_mod_cl6$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
+  dat_for_mod_cl6$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
   
   #Model 0: null model - dd ratio ~ dep
   cl6_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
                  data=dat_for_mod_cl6$dat_cast,
                  weights=dat_for_mod_cl6$dat_cast$bv_area)
   summary(cl6_mod0)
+  cl6_mod0_diagnostics <- postprocess_model(in_mod = cl6_mod0,
+                                            in_dat_for_mod = dat_for_mod_cl6)
   
   #Model 1: dd ratio ~ pasture + dep
   cl6_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~pst_pc_sse_sqrt + INSEE_DEP,
@@ -2836,7 +2821,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl6$dat_cast$bv_area)
   
   cl6_mod1_diagnostics <- postprocess_model(in_mod = cl6_mod1,
-                                        in_dat_for_mod = dat_for_mod_cl6)
+                                            in_dat_for_mod = dat_for_mod_cl6)
   cl6_mod1_diagnostics$smr
   plot(cl6_mod1_diagnostics$nsp_diag)
   plot(cl6_mod1_diagnostics$resid_env_p)
@@ -2848,19 +2833,19 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl6$dat_cast$bv_area)
   
   cl6_mod2_diagnostics <- postprocess_model(in_mod = cl6_mod2,
-                                        in_dat_for_mod = dat_for_mod_cl6)
+                                            in_dat_for_mod = dat_for_mod_cl6)
   cl6_mod2_diagnostics$smr
   plot(cl6_mod2_diagnostics$nsp_diag)
   plot(cl6_mod2_diagnostics$resid_env_p)
   
-  #Model 3: dd ratio ~ pasture + irs_pc_sav*dep
+  #Model 3: dd ratio ~ pasture*dep + irs_pc_sav*dep
   cl6_mod3 <- lm(ddt_to_bdtopo_ddratio_ceind~pst_pc_sse_sqrt*INSEE_DEP + 
                    irs_pc_sav*INSEE_DEP,
                  data=dat_for_mod_cl6$dat_cast,
                  weights=dat_for_mod_cl6$dat_cast$bv_area)
   
   cl6_mod3_diagnostics <- postprocess_model(in_mod = cl6_mod3,
-                                        in_dat_for_mod = dat_for_mod_cl6)
+                                            in_dat_for_mod = dat_for_mod_cl6)
   cl6_mod3_diagnostics$smr
   plot(cl6_mod3_diagnostics$nsp_diag)
   plot(cl6_mod3_diagnostics$resid_env_p)
@@ -2872,30 +2857,32 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl6$dat_cast[!72, bv_area])
   
   cl6_mod4_diagnostics <- postprocess_model(in_mod = cl6_mod4,
-                                        in_dat_for_mod = dat_for_mod_cl6,
-                                        removed_index = 72)
-  cl6_mod4_diagnostics$smr
+                                            in_dat_for_mod = dat_for_mod_cl6,
+                                            removed_index = 72)
+  cl6_mod4_diagnostics$smr #not significant
   plot(cl6_mod4_diagnostics$nsp_diag)
   plot(cl6_mod4_diagnostics$resid_env_p)
   cl6_mod4_diagnostics$resids_sp_p
   cl6_mod4_diagnostics$moran_lm
   
-  #Model 5: dd ratio ~ pasture*dep + irs_pc_sav*dep + imperviousness + summer aridity
+  #Model 5: dd ratio ~ pasture*dep + irs_pc_sav*dep + summer aridity
   cl6_mod5 <- lm(ddt_to_bdtopo_ddratio_ceind~pst_pc_sse_sqrt*INSEE_DEP + 
-                   irs_pc_sav*INSEE_DEP + imp_pc_sse + ari_ix_ssu,
+                   irs_pc_sav + ari_ix_ssu*INSEE_DEP,
                  data=dat_for_mod_cl6$dat_cast[!72,], #Basedon cook's distance outlier detection
                  weights=dat_for_mod_cl6$dat_cast[!72, bv_area])
   
   cl6_mod5_diagnostics <- postprocess_model(in_mod = cl6_mod5,
-                                        in_dat_for_mod = dat_for_mod_cl6,
-                                        removed_index = 72)
+                                            in_dat_for_mod = dat_for_mod_cl6,
+                                            removed_index = 72,
+                                            spatial_analysis = F)
   cl6_mod5_diagnostics$smr
   plot(cl6_mod5_diagnostics$nsp_diag)
   plot(cl6_mod5_diagnostics$resid_env_p)
   cl6_mod5_diagnostics$resids_sp_p
   cl6_mod5_diagnostics$moran_lm
   
-  cl6_chosen_model <- list(cl6_mod5, cl6_mod5_diagnostics)
+  cl6_chosen_model <- list(cl6_mod5, cl6_mod5_diagnostics,
+                           cl6_mod0, cl6_mod0_diagnostics)
   #Model 5 is the chosen model
   
   #Class 7 model - Seine-Maritime, Charente-Maritime ---------------------------
@@ -2920,7 +2907,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   
   dat_for_mod_cl7$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
   dat_for_mod_cl7$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
-
+  
   ## determine the column names that contain NA values
   nm <- names(dat_for_mod_cl7$dat_cast)[
     colSums(is.na(dat_for_mod_cl7$dat_cast)) != 0]
@@ -2939,6 +2926,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  data=dat_for_mod_cl7$dat_cast,
                  weights=dat_for_mod_cl7$dat_cast$bv_area)
   summary(cl7_mod0)
+  cl7_mod0_diagnostics <- postprocess_model(in_mod = cl7_mod0,
+                                            in_dat_for_mod = dat_for_mod_cl7,
+                                            spatial_analysis = F)
   
   #Model 1: dd ratio ~ annual aridity*dep
   cl7_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ari_ix_syr*INSEE_DEP,
@@ -2946,8 +2936,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl7$dat_cast$bv_area)
   
   cl7_mod1_diagnostics <- postprocess_model(in_mod = cl7_mod1,
-                                        in_dat_for_mod = dat_for_mod_cl7,
-                                        spatial_analysis = T)
+                                            in_dat_for_mod = dat_for_mod_cl7,
+                                            spatial_analysis = T)
   cl7_mod1_diagnostics$smr
   cl7_mod1_diagnostics$resids_sp_p
   plot(cl7_mod1_diagnostics$nsp_diag)
@@ -3003,7 +2993,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   )
   
   cl7_mod4_diagnostics$smr
-
+  
   
   #Model 5: dd ratio ~ manual aridity*dep  + pasture*dep + population density 
   cl7_mod5 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ari_ix_syr*INSEE_DEP + 
@@ -3024,7 +3014,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   cl7_mod5_diagnostics$moran_lm
   cl7_mod5_diagnostics$LMtests
   
-  cl7_chosen_model <- list(cl7_mod3, cl7_mod3_diagnostics)
+  cl7_chosen_model <- list(cl7_mod3, cl7_mod3_diagnostics,
+                           cl7_mod0, cl7_mod0_diagnostics)
   #Model 3 and Model 5 are two potential models
   #Model 5 which includes pasture is less prefered, albeit higher explanatory power
   #because the direction of the relationship with pasture is opposite between the departments
@@ -3044,7 +3035,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   
   ggplot(dat_for_mod_cl8$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
     geom_histogram() 
-
+  
   
   dat_for_mod_cl8$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
   dat_for_mod_cl8$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
@@ -3055,14 +3046,21 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
              color=INSEE_DEP, size=bv_area)) +
     geom_point() +
     geom_smooth(method='lm', se=F)
-
+  
+  #Modeol 0: dd ratio ~ mean
+  cl8_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~1,
+                 data=dat_for_mod_cl8$dat_cast,
+                 weights=dat_for_mod_cl8$dat_cast$bv_area)
+  cl8_mod0_diagnostics <- postprocess_model(in_mod = cl8_mod0,
+                                            in_dat_for_mod = dat_for_mod_cl8)
+  
   #Model 1: dd ratio ~ winter crops + dep
   cl8_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~bar_bk_ssu_TOTAL_sqrt,
                  data=dat_for_mod_cl8$dat_cast,
                  weights=dat_for_mod_cl8$dat_cast$bv_area)
   
   cl8_mod1_diagnostics <- postprocess_model(in_mod = cl8_mod1,
-                                        in_dat_for_mod = dat_for_mod_cl8)
+                                            in_dat_for_mod = dat_for_mod_cl8)
   cl8_mod1_diagnostics$smr
   plot(cl8_mod1_diagnostics$nsp_diag)
   plot(cl8_mod1_diagnostics$resid_env_p)
@@ -3073,16 +3071,17 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl8$dat_cast$bv_area)
   
   cl8_mod2_diagnostics <- postprocess_model(in_mod = cl8_mod2,
-                                        in_dat_for_mod = dat_for_mod_cl8,
-                                        spatial_analysis = T)
+                                            in_dat_for_mod = dat_for_mod_cl8,
+                                            spatial_analysis = T)
   cl8_mod2_diagnostics$smr
   plot(cl8_mod2_diagnostics$nsp_diag)
   plot(cl8_mod2_diagnostics$resid_env_p)
   plot(cl8_mod2_diagnostics$resids_sp_p)
   cl8_mod2_diagnostics$moran_lm
-
+  
   #Choose mod 2
-  cl8_chosen_model <- list(cl8_mod2, cl8_mod2_diagnostics)
+  cl8_chosen_model <- list(cl8_mod2, cl8_mod2_diagnostics,
+                           cl8_mod0, cl8_mod0_diagnostics)
   
   #Class 9 model - Nord, Bouches-du-Rhones -------------------------------------
   print('Selecting model for class 9')
@@ -3095,6 +3094,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   
   dat_for_mod_cl9$ddratio_env_plot
   check <- dat_for_mod_cl9$dat[, mean(cor), by= c('variable')]
+  dat_for_mod_cl9$var_heatmap
   
   #Exclude the four sub-basins with ratios over 3.5
   dat_for_mod_cl9$dat_cast <- dat_for_mod_cl9$dat_cast[
@@ -3116,6 +3116,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  data=dat_for_mod_cl9$dat_cast,
                  weights=dat_for_mod_cl9$dat_cast$bv_area)
   summary(cl9_mod0)
+  cl9_mod0_diagnostics <- postprocess_model(in_mod = cl9_mod0,
+                                            in_dat_for_mod = dat_for_mod_cl9)
   
   #Model 1: dd ratio ~ irrigation*dep
   cl9_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ire_pc_sse_sqrt*INSEE_DEP,
@@ -3123,7 +3125,7 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl9$dat_cast$bv_area)
   
   cl9_mod1_diagnostics <- postprocess_model(in_mod = cl9_mod1,
-                                        in_dat_for_mod = dat_for_mod_cl9)
+                                            in_dat_for_mod = dat_for_mod_cl9)
   cl9_mod1_diagnostics$smr
   plot(cl9_mod1_diagnostics$nsp_diag)
   plot(cl9_mod1_diagnostics$resid_env_p)
@@ -3135,8 +3137,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl9$dat_cast$bv_area)
   
   cl9_mod2_diagnostics <- postprocess_model(in_mod = cl9_mod2,
-                                        in_dat_for_mod = dat_for_mod_cl9,
-                                        spatial_analysis = T)
+                                            in_dat_for_mod = dat_for_mod_cl9,
+                                            spatial_analysis = T)
   cl9_mod2_diagnostics$smr
   plot(cl9_mod2_diagnostics$nsp_diag)
   plot(cl9_mod2_diagnostics$resid_env_p)
@@ -3154,9 +3156,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl9$dat_cast$bv_area)
   
   cl9_mod3_diagnostics <- postprocess_model(in_mod = cl9_mod3,
-                                        in_dat_for_mod = dat_for_mod_cl9)
+                                            in_dat_for_mod = dat_for_mod_cl9)
   cl9_mod3_diagnostics$smr
-
+  
   #Model 4: dd ratio ~ irrigatoin*dep + winter crops + imperviousness
   cl9_mod4 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ire_pc_sse_sqrt*INSEE_DEP +
                    wcr_pc_sse + imp_pc_sse,
@@ -3166,9 +3168,9 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   dat_for_mod_cl9$dat_cast[, which(is.na(wcr_pc_sse))]
   
   cl9_mod4_diagnostics <- postprocess_model(in_mod = cl9_mod4,
-                                        in_dat_for_mod = dat_for_mod_cl9,
-                                        spatial_analysis=T,
-                                        plot_nbs = T)
+                                            in_dat_for_mod = dat_for_mod_cl9,
+                                            spatial_analysis=T,
+                                            plot_nbs = T)
   cl9_mod4_diagnostics$smr
   vif(cl9_mod4)
   vif(cl9_mod2)
@@ -3186,36 +3188,28 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   #VIF of mod4 is only slightly higher than mod2.
   #Several areas of Nort have very low drainage density in BD Topo and have been 
   #completed with other sources by DDT, so large differences in ratio
-  cl9_chosen_model <- list(cl9_mod4, cl9_mod4_diagnostics)
+  cl9_chosen_model <- list(cl9_mod4, cl9_mod4_diagnostics,
+                           cl9_mod0, cl9_mod0_diagnostics)
   
   
   #Return ----------------------------------------------------------------------
   return(list(
-   cl1 = cl1_chosen_model,
-   cl2 = cl2_chosen_model,
-   cl3 = cl3_chosen_model,
-   cl4 = cl4_chosen_model,
-   cl5 = cl5_chosen_model,
-   cl6 = cl6_chosen_model,
-   cl7 = cl7_chosen_model,
-   cl8 = cl8_chosen_model,
-   cl9 = cl9_chosen_model
+    cl1 = cl1_chosen_model,
+    cl2 = cl2_chosen_model,
+    cl3 = cl3_chosen_model,
+    cl4 = cl4_chosen_model,
+    cl5 = cl5_chosen_model,
+    cl6 = cl6_chosen_model,
+    cl7 = cl7_chosen_model,
+    cl8 = cl8_chosen_model,
+    cl9 = cl9_chosen_model
   ))
 }
 
-#-------------------------- tabulate env_dd models -----------------------------
-in_mods_envdd <- tar_read(mods_envdd)
-
-tabulate_mods <- function(in_mods_envdd) {
-  
-  
-}
-
 #-------------------------- analyze vulnerable waters --------------------------
-# 
 # in_drainage_density_summary = tar_read(drainage_density_summary)
 # in_ddtnets_strahler = tar_read(ddtnets_strahler)
-# in_ddtnets_bvinters = tar_read(ddtnets_bvinters)
+# in_ddtnets_bvinters = tar_read(ddtnets_bvinters_stats)$ddtnets_bvinters_format
 # in_bdtopo_strahler = tar_read(bdtopo_strahler)
 # in_bdtopo_bvinters = tar_read(bdtopo_bvinters)
 
@@ -3224,18 +3218,150 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
                                       in_ddtnets_strahler,
                                       in_bdtopo_strahler,
                                       in_bdtopo_bvinters
-    ) {
-   names(in_bdtopo_bvinters)
-   names(in_bdtopo_strahler)
-   
-   ddtnets_dat <- merge(in_ddtnets_bvinters,
-                        in_ddtnets_strahler[, c('UID_CE', 'strahler'), with=F])
+) {
+  names(in_bdtopo_bvinters)
+  names(in_bdtopo_strahler)
+
+  #--------------------- Analyze DDT networks ----------------------------------
+  #For departments where there is information on non-watercourses (NCE)
   
-   bdtopo_dat <- merge(in_bdtopo_bvinters,
-                       in_bdtopo_strahler[, c('ID', 'strahler'), with=F],
-                       by='ID')
-   
-   
+  #Add strahler order and departmental stats to DDT net data
+  ddtnets_dat <- merge(in_ddtnets_bvinters,
+                       in_ddtnets_strahler[, c('UID_CE', 'strahler'), with=F],
+                       by='UID_CE',
+                       all.x=T) %>%
+    merge(in_drainage_density_summary$nets_stats_melt_dep[variable=='bdtopo',],
+          by='INSEE_DEP') %>%
+    .[!(UID_BV %in% in_drainage_density_summary$nodata_bvs$UID_BV),] #Remove missing BVs
+  remove(in_ddtnets_bvinters)
+  remove(in_ddtnets_strahler)
+  
+  #Compute the length of non-perennial segments classified as non-watercourse
+  #and the ratio between the share of non-perennial segments classified as non-watercourse
+  #to the share of non-perennial segments in the BV (to control for differences 
+  #in non-perennial segment prevalence)
+  int_nce_stats_bv <-   in_ddtnets_stats[, `:=`(
+    int_length = .SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
+    nce_int_length = .SD[type_stand=="Non cours d'eau" & 
+                           regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
+    per_nce_determined_regime = .SD[regime_formatted != 'undetermined' & 
+                                      type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]/
+      .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)],
+    per_nce_intratio = (
+      .SD[type_stand=="Non cours d'eau" & regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
+        .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]
+    )/
+      (.SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
+         .SD[, sum(length_cat_bv, na.rm=T)])
+  ), by='UID_BV']
+  merge(int_nce_stats_bv[!duplicated(UID_BV), 
+                         .(UID_BV, total_length_bv, per_int,
+                           per_ce, per_ind, per_nce, 
+                           int_length, nce_int_length,per_nce_determined_regime, 
+                           per_nce_intratio)], by='UID_BV')  
+  
+  #Compute IRES representativeness at the department level
+  int_nce_stats_dep <-   in_ddtnets_stats[
+    !(UID_BV %in% nodata_bvs$UID_BV), list(
+      per_nce_determined_regime = .SD[regime_formatted != 'undetermined' & 
+                                        type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]/
+        .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)],
+      int_length = .SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
+      nce_int_length = .SD[type_stand=="Non cours d'eau" & 
+                             regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
+      per_nce_intratio = (
+        .SD[type_stand=="Non cours d'eau" & regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
+          .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]
+      )/
+        (.SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
+           .SD[, sum(length_cat_bv, na.rm=T)])
+    ), by='INSEE_DEP']
+  
+  #Compute headwater statistics by department:
+  # length of headwaters (length_hdw) 
+  # length of headwater with non-watercourse status (length_nce_hdw)
+  # proportion of hydrographic length of order 1 or 2
+  # proportion of NCE that are of order 1 or 2
+  # representativeness ratio of orders 1 in 2 in NCEs
+  dep_hdw_analyzed <- ddtnets_dat[
+    ,list(
+      length_hdw =.SD[strahler < 3, 
+                      sum(geom_Length)],
+      length_nce = .SD[type_stand == "Non cours d'eau", 
+                       sum(geom_Length)],
+      length_nce_hdw = .SD[(strahler < 3) & (type_stand == "Non cours d'eau"), 
+                           sum(geom_Length)],
+      per_length_hdw = .SD[strahler < 3, 
+                             sum(geom_Length)]/unique(length_ddtnets_total),
+      per_nce = unique(per_nce),
+      length_ddtnets_total = unique(length_ddtnets_total)
+    ), by=INSEE_DEP] %>%
+    .[per_nce > 0.01
+      ,`:=`(
+        per_length_hdw_nce = (length_nce_hdw/length_nce),
+        hdw_nce_representativeness = (length_nce_hdw/length_nce)/(length_hdw/length_ddtnets_total)
+      ), by=INSEE_DEP]
+  
+  #Compute equivalent statistics by strahler order nationally:
+  total_length_fr_w_nce<- ddtnets_dat[ #total length in deps with nce data
+    INSEE_DEP %in% dep_hdw_analyzed[per_nce > 0.01, INSEE_DEP], 
+    sum(geom_Length)]
+  per_nce_fr_w_nce <- ddtnets_dat[ #% length in deps with nce data
+    INSEE_DEP %in% dep_hdw_analyzed[per_nce > 0.01, INSEE_DEP],
+    .SD[type_stand == "Non cours d'eau", sum(geom_Length)]/sum(geom_Length)]
+  
+  fr_hdw_analyzed <- ddtnets_dat[
+    INSEE_DEP %in% dep_hdw_analyzed[per_nce > 0.01, INSEE_DEP],
+    list(
+      length_order = sum(geom_Length),
+      length_nce = .SD[type_stand == "Non cours d'eau", 
+                       sum(geom_Length)],
+      per_length_order = sum(geom_Length)/total_length_wnce,
+      per_nce = (.SD[type_stand == "Non cours d'eau", sum(geom_Length)]
+                 /sum(geom_Length))
+    ), by=strahler] %>%
+    .[,`:=`(
+        per_nce_length_order = (length_nce/(per_nce_fr_w_nce*total_length_fr_w_nce)),
+        order_nce_representativeness = ((length_nce/(per_nce_fr_w_nce*total_length_fr_w_nce))
+                                        /(length_order/total_length_fr_w_nce))
+      ), by=strahler]
+  
+  
+  #--------------------- Analyze BD topo ----------------------------------
+  bdtopo_dat <- merge(in_bdtopo_bvinters,
+                      in_bdtopo_strahler[, c('ID', 'strahler'), with=F],
+                      by='ID')
+  
+  
+  
+  #Bar chart of intermittent-river representativeness
+  p_intratio_bars_dep <- ggplot(
+    dep_stats[!duplicated(INSEE_DEP) & 
+                per_nce_determined_regime>0.5 &
+                per_nce>0.01,],
+    aes(x=reorder(INSEE_DEP,per_nce_intratio),
+        y=per_nce_intratio,
+        fill=nce_int_length/1000
+    )) +
+    geom_bar(stat='identity') +
+    geom_hline(yintercept=1) +
+    scale_x_discrete(name='Department number') +
+    scale_y_continuous(
+      name='Representativeness of intermittent rivers in segments classified as non-watercourses', 
+      expand=c(0,0)) +
+    scale_fill_distiller(name=str_wrap('Length of intermittent rivers classified
+                                       as non-watercourses (km)', 30),
+                         palette='Spectral', trans = "sqrt",
+                         breaks=c(2, 100, 500, 1000, 2000, 6000))+
+    #geom_text(aes(label=INSEE_DEP)) +
+    coord_flip() +
+    theme_bw() +
+    theme(
+      panel.grid.minor = element_blank(),
+      legend.position=c(0.8,0.2),
+      legend.background = element_blank()
+    )
+  
 }
 
 #-------------------------- plotmap_envdd_cors --------------------------------------
