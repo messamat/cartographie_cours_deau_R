@@ -19,6 +19,7 @@ library(targets)
 tar_load(metadata_nets_formatted)
 tar_load(ddtnets_bvinters)
 tar_load(ddt_nets_colnas)
+tar_load(envdd_dep_plots)
 tar_load(missing_ddtdata_bvs)
 tar_load(expertise_effort)
 
@@ -65,7 +66,7 @@ attrimatches_pairwise_avg  <- as.data.table(
   .[, mean(V1)]
 ```
 
-## Generla stats
+## General stats
 
 There are `r length(unique(metadata_nets_formatted$local_url))` unique networks for mainland France, for a total of `r ddtnets_n_reported` individual watercourse segments. After removing invalid and duplicate geometries, there remain `r ddtnets_n` individual segments in the compiled dataset.
 
@@ -228,8 +229,8 @@ The amount of field expertise required to follow the guidelines provided by the 
 ```{r drainage_density_summary}
 
 tar_load(drainage_density_summary)
-
 dep_stats <- drainage_density_summary$nets_stats_melt_dep
+tar_load(vulnerable_waters_analysis)
 
 #---------------------- compute general stats - to be integrated in report ----
 #Total length, variability in drainage density at the level of departments
@@ -244,59 +245,8 @@ total_length_fr <- dep_stats[, list(
                          sum(length_ddtnets_ind, na.rm=T))/1000,
     variable = 'ddtnets_ceind')])
 
-
-
-ce_per_fr <- dep_stats[!duplicated(INSEE_DEP), weighted.mean(per_ce, length_ddtnets_total)]
-ind_per_fr <- dep_stats[!duplicated(INSEE_DEP), weighted.mean(per_ind, length_ddtnets_total)]
-nce_per_fr <- dep_stats[!duplicated(INSEE_DEP), weighted.mean(per_nce, length_ddtnets_total)]
-
 #Range in drainage density within deps
 dd_range_dep <- drainage_density_summary$nets_stats_merged_bv[bv_area>10 & bdtopo >500 & total_length_bv_ddtnets>0, max(ddt_to_bdtopo_ddratio_ceind,na.rm=T)-min(ddt_to_bdtopo_ddratio_ceind,na.rm=T), by=INSEE_DEP] 
-
-#Representativeness of intermittent rivers in declassified segments
-nce_intratio_fr <- dep_stats[!duplicated(INSEE_DEP) & 
-                               per_nce_determined_regime>0.5 &
-                               per_nce>0.01,
-                             (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))/
-                               (sum(int_length)/sum(length_ddtnets_total))]
-
-#Representativeness of intermittent rivers in declassified segments by department
-nce_intratio_dep <- dep_stats[!duplicated(INSEE_DEP) & 
-                               per_nce_determined_regime>0.5 &
-                               per_nce>0.01,
-                             (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))/
-                               (sum(int_length)/sum(length_ddtnets_total)),
-                             by='INSEE_DEP']
-
-ggplot(nce_intratio_dep, aes(x=V1)) + geom_histogram()
-nce_intratio_dep[, .SD[V1>=1.5, .N]/.N] #Proportion of departments for which intermittent rivers are over-represented by more than 50% in NCE
-
-#Length of intermittent NCE/length of NCE
-per_int_nce_fr <- dep_stats[!duplicated(INSEE_DEP) & 
-                              per_nce_determined_regime>0.5 &
-                              per_nce>0.01,
-                            (sum(nce_int_length)/sum(per_nce*length_ddtnets_total))]
-
-per_int_nce_dep <- dep_stats[!duplicated(INSEE_DEP) & 
-                              per_nce_determined_regime>0.5 &
-                              per_nce>0.01,
-                            (sum(nce_int_length)/sum(per_nce*length_ddtnets_total)),
-                            by='INSEE_DEP']
-ggplot(per_int_nce_dep, aes(x=V1)) + geom_histogram()
-per_int_nce_dep[, .SD[V1>=0.75, .N]/.N] #Proportion of departments for which intermittent rivers make up more than 75% of NCE
-
-
-#% of intermittent rivers in France (based on those with data)
-int_per_fr <- dep_stats[!duplicated(INSEE_DEP) & 
-                          per_nce_determined_regime>0.5 &
-                          per_nce>0.01, sum(int_length)/sum(length_ddtnets_total)]
-
-nce_int_length_fr <- dep_stats[!duplicated(INSEE_DEP) & 
-                                 per_nce_determined_regime>0.5 &
-                                 per_nce>0.01, sum(nce_int_length)/1000]
-nce_length_fr <- dep_stats[!duplicated(INSEE_DEP) & 
-                             per_nce_determined_regime>0.5 &
-                             per_nce>0.01, sum(per_nce*length_ddtnets_total)/1000]
 ```
 
 ## Cartographic basis
@@ -317,7 +267,6 @@ Computing a drainage density ratio also controlled for differences in absolute d
 #| fig-column: page-right
 #| out-width: 100%
 
-tar_load(envdd_dep_plots)
 envdd_dep_plots$dd_scatter_dep
 ```
 
@@ -331,7 +280,7 @@ To investigate the potential drivers of variations in drainage density ratio wit
 
 ### Variability in drainage density ratio
 
-The average drainage density ratio varied considerably between departments across France, both in terms of mean (drainage density ratio at the departmental level: mean± SD = `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), mean(lengthratio_ddt_ceind_to_other)]` ± `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), sd(lengthratio_ddt_ceind_to_other)]`) and range (within-department range in drainage density ratio: mean ± SD = `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), mean(V1)]`± `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), sd(V1)]`), whether BDTOPO and RHT was used for comparison (Figure 2, Figure S1, Table SX). `r dep_stats[variable=='bdtopo' & lengthratio_ddt_ceind_to_other>1.10, .N]`departments were particularly inclusive so that the department-wide drainage density exceeded that of BDTOPO by more than 10%
+The average drainage density ratio varied considerably between departments across France, both in terms of mean (drainage density ratio at the departmental level: mean± SD = `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), mean(lengthratio_ddt_ceind_to_other)]` ± `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), sd(lengthratio_ddt_ceind_to_other)]`) and range (within-department range in drainage density ratio: mean ± SD = `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), mean(V1)]`± `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), sd(V1)]`), whether BDTOPO and RHT was used for comparison (Figure 2, Figure S1, Table SX). `r dep_stats[variable=='bdtopo' & lengthratio_ddt_ceind_to_other>1.10, .N]`departments were particularly inclusive so that the department-wide drainage density exceeded that of BDTOPO by more than 10%, whereas `r dep_stats[variable=='bdtopo' & lengthratio_ddt_ceind_to_other< 0.5, .N]` departments categorized less than half of the network length shown in BDTOPO as watercourses.
 
 ```{r dd_dep_plots_bars}
 #| fig-column: page-right
@@ -356,7 +305,6 @@ When relating drainage density ratios to environmental variables at the departme
 ```{r env_lengthratio_bdtopo}
 #| fig-column: page-right
 #| out-width: 100%
-
 envdd_dep_plots$env_lengthratio_bdtopo
 ```
 

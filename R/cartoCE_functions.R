@@ -1225,10 +1225,13 @@ summarize_drainage_density <- function(in_ddtnets_stats,
   
   
   #Compute statistics for BV level (catchment) ----------------------------------
-  ddtnets_stats <-  dcast(in_ddtnets_stats, 
+  ddtnets_stats <- dcast(in_ddtnets_stats, 
                           as.formula(paste(paste(id_cols, collapse='+'),
                                            '~type_stand')),
                           value.var='length_cat_bv', fun.aggregate=sum) %>%
+    merge(in_ddtnets_stats[!duplicated(UID_BV), 
+                           .(UID_BV, total_length_bv, per_int,
+                             per_ce, per_ind, per_nce)], by='UID_BV') %>%
     setnames(c("Cours d'eau", "Indéterminé", "Inexistant", "Non cours d'eau"),
              c('length_bv_ce', 'length_bv_ind', 'length_bv_inx', 'length_bv_nce'))
   
@@ -1250,8 +1253,11 @@ summarize_drainage_density <- function(in_ddtnets_stats,
     #.[!(INSEE_DEP %in% c(92, 93, 94)),] %>%   #Remove departments from ile de france included with Paris
     merge(in_bvdep_inters[, .(UID_BV, POLY_AREA)], by="UID_BV") %>%
     setnames(c('length_bv_carthage', 'length_bv_bcae',
-               'length_bv_bdtopo', 'length_bv_rht', 'POLY_AREA'),
-             c('carthage', 'bcae', 'bdtopo', 'rht', 'bv_area'))
+               'length_bv_bdtopo', 'length_bv_rht', 
+               'POLY_AREA'),
+             c('carthage', 'bcae',
+               'bdtopo', 'rht', 
+               'bv_area'))
   
   nets_stats_melt <- melt(
     nets_stats_merged_bv,
@@ -1479,6 +1485,7 @@ plot_envdd_dep <- function(in_drainage_density_summary,
                            in_env_dd_merged_dep,
                            in_bvdep_inters,
                            in_varnames) {
+  
   dep_stats <- in_drainage_density_summary$nets_stats_melt_dep
   
   #------------------------- Plots of drainage density and deviation -----------
@@ -1553,7 +1560,7 @@ plot_envdd_dep <- function(in_drainage_density_summary,
     
     plot_env_lengthratio_ceind <- ggplot(
       env_dd_melt, 
-      aes(x=value, y=lengthratio_ddt_ceind_to_other,
+      aes(x=value, y=log(lengthratio_ddt_ceind_to_other),
           color=per_nce)) +
       geom_point() +
       geom_hline(yintercept=1, alpha=0.5) +
@@ -1614,7 +1621,6 @@ plot_envdd_dep <- function(in_drainage_density_summary,
   return(list(
     dd_scatter_dep = p_dd_scatter_dep,
     ddratio_bars_dep =p_ddratio_bars_dep,
-    intratio_bars_dep =p_intratio_bars_dep,
     env_lengthratio_bdtopo = p_env_lengthratio_bdtopo,
     env_lengthratio_carthage = p_env_lengthratio_carthage
   ))
@@ -1961,7 +1967,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
 }
 
 
-#-------------------------- build env-dd models ---------------------------------
+#-------------------------- build env-dd models intra department  ---------------------------------
 #in_envdd_multivar_analysis=tar_read(envdd_multivar_analysis)
 # in_drainage_density_summary=tar_read(drainage_density_summary)
 # in_bvdep_inters_gdb_path=tar_read(bvdep_inters_gdb_path)
@@ -1970,9 +1976,9 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
 #Spatial regression lecture/lab: https://www.emilyburchfield.org/courses/gsa/spatial_regression_lab
 #Other class on spatial regression: https://chrismgentry.github.io/Spatial-Regression/
 
-build_mods_envdd <- function(in_envdd_multivar_analysis,
-                             in_drainage_density_summary,
-                             in_bvdep_inters_gdb_path) {
+build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
+                                      in_drainage_density_summary,
+                                      in_bvdep_inters_gdb_path) {
   
   #Merge all input non-spatial data
   env_dd_melt_gclass <- merge(
@@ -3206,6 +3212,13 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
   ))
 }
 
+#-------------------------- build env-dd models inter department ---------------
+in_env_dd_merged_dep <- tar_read(env_dd_merged_dep)
+build_mods_envdd_intradep <- function(in_env_dd_merged_dep) {
+  
+}
+
+
 #-------------------------- analyze vulnerable waters --------------------------
 # in_drainage_density_summary = tar_read(drainage_density_summary)
 # in_ddtnets_strahler = tar_read(ddtnets_strahler)
@@ -3214,8 +3227,8 @@ build_mods_envdd <- function(in_envdd_multivar_analysis,
 # in_bdtopo_bvinters = tar_read(bdtopo_bvinters)
 
 analyze_vulnerable_waters <- function(in_drainage_density_summary,
-                                      in_bvdep_inters_gdb_path,
                                       in_ddtnets_strahler,
+                                      in_ddtnets_bvinters,
                                       in_bdtopo_strahler,
                                       in_bdtopo_bvinters
 ) {
@@ -3224,6 +3237,8 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
 
   #--------------------- Analyze DDT networks ----------------------------------
   #For departments where there is information on non-watercourses (NCE)
+  deps_wnce <- in_drainage_density_summary$nets_stats_melt_dep[per_nce > 0.01,
+                                                               unique(INSEE_DEP)]
   
   #Add strahler order and departmental stats to DDT net data
   ddtnets_dat <- merge(in_ddtnets_bvinters,
@@ -3255,6 +3270,9 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
         #length of that order that is NCE
         length_nce = .SD[type_stand == "Non cours d'eau", 
                          sum(geom_Length)],
+        #length of that order that is NCE and has a determined regime
+        length_determined = .SD[regime_formatted != 'undetermined', 
+                                    sum(geom_Length)],
         #length of that order that is NCE and has a determined regime
         length_nce_determined = .SD[type_stand == "Non cours d'eau" &
                                       regime_formatted != 'undetermined', 
@@ -3294,91 +3312,92 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
   }
   
   sum_nce_ires_stats<- function(in_dt) {
-    in_dt[
+    new_row <- in_dt[
       , list(
         strahler = 'total',
-        length_order = sum(length_order),
-        length_nce = sum(length_nce),
-        length_nce_determined = sum(length_nce_determined),
-        length_ires = sum(length_ires),
-        length_nce_ires = sum(length_nce_ires),
+        length_order = sum(length_order, na.rm=T),
+        length_nce = sum(length_nce, na.rm=T),
+        length_ires = sum(length_ires, na.rm=T),
+        length_nce_ires = sum(length_nce_ires, na.rm=T),
         per_length_order = NA,
-        per_nce = sum(length_nce)/sum(length_order),
-        per_ires = sum(length_ires)/sum(length_order),
-        per_nce_ires = sum(length_nce_ires)/sum(length_order),
+        per_nce = sum(length_nce, na.rm=T)/sum(length_order, na.rm=T),
+        per_ires = sum(length_ires, na.rm=T)/sum(length_order, na.rm=T),
+        per_nce_ires = sum(length_nce_ires, na.rm=T)/sum(length_order, na.rm=T),
         per_nce_length_order = NA,
         per_ires_length_order = NA,
         order_nce_representativeness = NA
-      )]}
+      )]
+    
+    if ('length_nce_determined' %in% names(in_dt)) {
+      new_row$length_nce_determined = in_dt[, sum(length_nce_determined, na.rm=T)]
+    }
+    
+    if ('length_determined'  %in% names(in_dt)) {
+      new_row$length_determined = in_dt[, sum(length_determined, na.rm=T)]
+    }
+    
+    return(new_row[, names(new_row)[names(new_row) %in% names(in_dt)], 
+                   with=F])
+    }
   
-  #Compute statistics at national level
-  nce_vulnerable_stats_fr <- comp_nce_ires_stats_byorder(
-    ddtnets_dat[INSEE_DEP %in% dep_hdw_analyzed[per_nce > 0.01, INSEE_DEP],]) %>%
-    rbind(sum_nce_ires_stats(.))
-  
-  #Compute statistics at dep levels
+  #Compute statistics at dep levels -------------------------------------------
   nce_vulnerable_stats_dep <- ddtnets_dat[, comp_nce_ires_stats_byorder(.SD),
                                           by=INSEE_DEP] %>%
-    rbind(.[, sum_nce_ires_stats(.SD), by=INSEE_DEP])
-  
-    
-  #--- Compute representativeness of vulnerable waters in NCE at national level
-  #Percentage of NCE with a determined regime that are either IRES or headwaters
-  fr_per_nce_hdworires <- nce_vulnerable_stats_fr[
-    , ((.SD[strahler %in% c(1,2), sum(length_nce_determined)] 
-        + .SD[strahler %in% c(3,4,NA), sum(length_nce_ires)])
-       /.SD[strahler=='total',length_nce_determined])
-  ]
-  
-  #Percentage of total river network that is either IRES or headwaters
-  fr_per_hdworires <- nce_vulnerable_stats_fr[
-    , ((.SD[strahler %in% c(1,2), sum(length_order)] + 
-       .SD[strahler %in% c(3,4,NA), sum(length_ires)])/
-      .SD[strahler=='total', length_order])
-  ]
+    rbind(.[, sum_nce_ires_stats(.SD), by=INSEE_DEP]) %>%
+    .[, stats_source := 'ddtnets']
   
   #--- Compute representativeness of vulnerable waters in NCE at departmental level
   #Percentage of NCE with a determined regime that are either IRES or headwaters
   nce_vulnerable_stats_dep[
-    , per_nce_hdworires := ((.SD[strahler %in% c(1,2), sum(length_nce_determined)] 
-        + .SD[strahler %in% c(3,4,NA), sum(length_nce_ires)])
+    , per_nce_hdworires := ((.SD[strahler %in% c(1), sum(length_nce_determined)] 
+        + .SD[strahler %in% c(2,3,4,NA), sum(length_nce_ires)])
        /.SD[strahler=='total',length_nce_determined]),
   by=INSEE_DEP]
   
   #Percentage of total river network that is either IRES or headwaters
   nce_vulnerable_stats_dep[
-    , per_hdworires := ((.SD[strahler %in% c(1,2), sum(length_order)] + 
-          .SD[strahler %in% c(3,4,NA), sum(length_ires)])/
+    , per_hdworires := ((.SD[strahler %in% c(1), sum(length_order)] + 
+          .SD[strahler %in% c(2,3,4,NA), sum(length_ires)])/
          .SD[strahler=='total', length_order]),
   by=INSEE_DEP]
   
   nce_vulnerable_stats_dep[
     , representativeness_hdworires_in_nce := per_nce_hdworires/per_hdworires]
 
-  #--------------------- Analyze those without information on NCE, but information on BD TOPO ----------------------------------
+  #--------------------- Analyze information from BD TOPO ----------------------------------
   #Check how many extra departments can be analyzed using BD TOPO
   ddtnets_dat[ #% length of DDT network that has been associated with a BD TOPO segment by department
-    , per_bdtopo_determined_dep := (.SD[!is.na(ID_bdtopo_merge), sum(geom_Length)]/
-                                      sum(geom_Length))
-    , by=INSEE_DEP]
+    , `:=`(
+      per_bdtopo_determined_dep = (
+        .SD[!is.na(ID_bdtopo_merge), sum(geom_Length)]/
+          sum(geom_Length)),
+     per_nce_bdtopo_detemrined_dep = (
+       .SD[!is.na(ID_bdtopo_merge) & type_stand == "Non cours d'eau", 
+           sum(geom_Length)]/
+         .SD[type_stand == "Non cours d'eau", sum(geom_Length)])
+    )
+      , by=INSEE_DEP]
   
-  ggplot(ddtnets_dat, aes(x=per_bdtopo_determined_dep)) + geom_histogram()
+  ggplot(ddtnets_dat[!duplicated(INSEE_DEP),],
+         aes(x=per_bdtopo_determined_dep)) + 
+    geom_histogram(breaks=seq(0,1,0.05)) 
   
-  ddtnets_dat[INSEE_DEP %in% dep_hdw_analyzed[per_nce <= 0.01, INSEE_DEP], 
+  ddtnets_dat[!(INSEE_DEP %in% deps_wnce), 
               length(unique(INSEE_DEP))]
-  ddtnets_dat[INSEE_DEP %in% dep_hdw_analyzed[per_nce <= 0.01, INSEE_DEP] & 
-                per_bdtopo_determined_dep > 0.9, 
+  ddtnets_dat[!(INSEE_DEP %in% deps_wnce) & 
+                (per_bdtopo_determined_dep > 0.9), 
               length(unique(INSEE_DEP))]
   
   #Merge data from DDT net for departments with at least 90% of BD TOPO data
   #include those departments that have NCE data as a quality check
   bdtopo_dat <- merge(in_bdtopo_bvinters,
                       in_bdtopo_strahler[, c('ID', 'strahler'), with=F],
-                      by='ID') %>%
+                      by='ID', all.x=T) %>%
     merge(ddtnets_dat[type_stand %in% c("Cours d'eau", "Indéterminé") & 
                         per_bdtopo_determined_dep > 0.9, 
                       c('UID_CE', 'type_stand', 'ID_bdtopo_merge')
-    ], by.x='ID', by.y='ID_bdtopo_merge', all.x=T)
+    ], by.x='ID', by.y='ID_bdtopo_merge', all.x=T) %>%
+    .[!(UID_BV %in% in_drainage_density_summary$nodata_bvs$UID_BV),] #Remove missing BVs
   
   #Compute same statistics with BD TOPO-determined strahler order
   #Length of each order and ires in DDT nets for NCE are those without ID
@@ -3387,7 +3406,7 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
       , sum(Shape_Length)]
     
     per_nce_fr <- in_dt[ #% length in deps with nce data
-      , .SD[!is.na(UID_CE), sum(Shape_Length)]/sum(Shape_Length)]
+      , .SD[is.na(UID_CE), sum(Shape_Length)]/sum(Shape_Length)]
     
 
     hdw_ires_analyzed <- in_dt[
@@ -3395,25 +3414,25 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
         #length of that order
         length_order = sum(Shape_Length), 
         #length of that order that is NCE
-        length_nce = .SD[!is.na(UID_CE),
+        length_nce = .SD[is.na(UID_CE),
                          sum(Shape_Length)],
         #length of that order that is IRES
         length_ires = .SD[REGIME=='Intermittent', 
                           sum(Shape_Length)],
         #length of that order that is IRES
-        length_nce_ires = .SD[(REGIME=='Intermittent') & (!is.na(UID_CE)), 
+        length_nce_ires = .SD[(REGIME=='Intermittent') & (is.na(UID_CE)), 
                               sum(Shape_Length)],
         #% of total network length that is of this order 
         per_length_order = (sum(Shape_Length)/ 
                               total_length_fr),
         #% of length of that order that is NCE 
-        per_nce = (.SD[!is.na(UID_CE), sum(Shape_Length)]
+        per_nce = (.SD[is.na(UID_CE), sum(Shape_Length)]
                    /sum(Shape_Length)),
         #% of length with regime and that order that is IRES
         per_ires = (.SD[REGIME=='Intermittent', sum(Shape_Length)] 
                     /sum(Shape_Length)),
         #% of length with regime and that order that is NCE and IRES
-        per_nce_ires = (.SD[REGIME=='Intermittent' & !is.na(UID_CE), 
+        per_nce_ires = (.SD[REGIME=='Intermittent' & is.na(UID_CE), 
                             sum(Shape_Length)]
                         /sum(Shape_Length))
       ), by=strahler] %>%
@@ -3432,67 +3451,181 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
 
   nce_vulnerable_stats_dep_bdtopo <- bdtopo_dat[
     , comp_nce_ires_stats_byorder_bdtopo(.SD),
+    by=INSEE_DEP] %>%
+    .[, strahler := as.character(strahler)] %>%
+    rbind(.[, sum_nce_ires_stats(.SD), by=INSEE_DEP], fill=T)  %>%
+    .[, stats_source := 'bdtopo']
+  
+  #Compare for departments with NCE data
+  nce_vulnerable_stats_dep_bdtopo_ddtnet_merge <- merge(
+    nce_vulnerable_stats_dep_bdtopo,
+    nce_vulnerable_stats_dep,
+    by=c('INSEE_DEP', 'strahler'),
+    suffixes = c("_bdtopo", "_ddtnet"),
+    all.x=F, all.y=T
+  ) %>%
+    .[(INSEE_DEP %in%  deps_wnce) &
+        (INSEE_DEP %in% ddtnets_dat[type_stand %in% c("Cours d'eau", "Indéterminé") & 
+                                      per_bdtopo_determined_dep > 0.92, INSEE_DEP]),]
+  
+  ggplot(nce_vulnerable_stats_dep_bdtopo_ddtnet_merge[strahler=='total',],
+         aes(x=length_nce_bdtopo, y=length_nce_ddtnet, color=as.factor(INSEE_DEP))) +
+    geom_point() +
+    geom_text(aes(label=INSEE_DEP)) +
+    geom_abline() +
+    scale_x_log10() +
+    scale_y_log10()
+  #The match is very good, so BDTOPO can be used this way for the assessment
+  
+  #--- Compute representativeness of vulnerable waters in NCE at departmental level
+  #For subset of departments that need and can be analyzed with BDTOPO
+  #-> Those that don't have data on NCE + are well paired with BDTOPO
+  nce_vulnerable_stats_dep_bdtopo_sub <- nce_vulnerable_stats_dep_bdtopo[
+    !(INSEE_DEP %in%  deps_wnce) &
+      (INSEE_DEP %in% ddtnets_dat[type_stand %in% c("Cours d'eau", "Indéterminé") & 
+                                    per_bdtopo_determined_dep > 0.9, INSEE_DEP]),]
+  
+  #Percentage of NCE with a determined regime that are either IRES or headwaters
+  nce_vulnerable_stats_dep_bdtopo_sub[
+    , per_nce_hdworires := ((.SD[strahler %in% c(1), sum(length_nce)] 
+                             + .SD[strahler %in% c(2, 3,4,NA), sum(length_nce_ires)])
+                            /.SD[strahler=='total',length_nce]),
     by=INSEE_DEP]
+  
+  #Percentage of total river network that is either IRES or headwaters
+  nce_vulnerable_stats_dep_bdtopo_sub[
+    , per_hdworires := ((.SD[strahler %in% c(1), sum(length_order)] + 
+                           .SD[strahler %in% c(2, 3,4,NA), sum(length_ires)])/
+                          .SD[strahler=='total', length_order]),
+    by=INSEE_DEP]
+  
+  nce_vulnerable_stats_dep_bdtopo_sub[
+    , representativeness_hdworires_in_nce := per_nce_hdworires/per_hdworires]
+  
+  #--- Merge results and return ------------------------------------------------
+  nce_vulnerable_stats_dep_all <- rbind(
+    nce_vulnerable_stats_dep[(INSEE_DEP %in% deps_wnce),],
+    nce_vulnerable_stats_dep_bdtopo_sub,
+    fill=T
+  ) %>%
+    .[stats_source=='bdtopo', ':='(length_nce_determined = length_nce,
+                                   length_determined = length_order)]
 
+  #Compute statistics at national level-----------------------------------------
+  nce_vulnerable_stats_fr <- nce_vulnerable_stats_dep_all[
+    , sum_nce_ires_stats(.SD), by=strahler] %>%
+    .[,`:=`(per_length_order=NULL, per_nce_length_order=NULL,
+           per_ires_length_order=NULL, order_nce_representativeness=NULL)]
+  
+  total_length_fr_wncedat <-  nce_vulnerable_stats_fr[strahler=='total', length_order] 
+  total_length_nce_fr_wncedat <- nce_vulnerable_stats_fr[strahler=='total', length_nce] 
+  total_length_ires_fr_wncedat <- nce_vulnerable_stats_fr[strahler=='total', length_ires] #total length in deps with nce data
+  
+  nce_vulnerable_stats_fr[,`:=`(
+      #% of the total length that is in that order
+      per_length_order = (length_order/total_length_fr_wncedat),
+      #% of the total NCE length that is in that order
+      per_nce_length_order = (length_nce/total_length_nce_fr_wncedat), 
+      #% of the total IRES length that is in that order
+      per_ires_length_order = (length_ires/total_length_ires_fr_wncedat), 
+      #Ratio of % of the total NCE length that is in that order to % length of total length that is in that order
+      order_nce_representativeness = ((length_nce/total_length_nce_fr_wncedat)
+                                      /(length_order/total_length_fr_wncedat))
+    ),
+    by=strahler]
+  
+  #--- Compute representativeness of vulnerable waters in NCE at national level
+  #Percentage of NCE with a determined regime that are either IRES or headwaters
+  fr_per_nce_hdworires <- nce_vulnerable_stats_fr[
+    , ((.SD[strahler %in% c(1), sum(length_nce_determined)] 
+        + .SD[strahler %in% c(2, 3, 4,NA), sum(length_nce_ires)])
+       /.SD[strahler=='total',length_nce_determined])
+  ]
+  
+  #Percentage of total river network that is either IRES or headwaters
+  fr_per_hdworires <- nce_vulnerable_stats_fr[
+    , ((.SD[strahler %in% c(1), sum(length_order)] + 
+          .SD[strahler %in% c(2,3,4,NA), sum(length_ires)])/
+         .SD[strahler=='total', length_order])
+  ]
+  
+  #Compute representativeness of vulnerable waters in NCEs
+  representativeness_hdworires_in_nce_fr <- fr_per_nce_hdworires/fr_per_hdworires
+  
+  #Assess percentage length represented in national figure compared to 
+  #total DDT networks
+  deps_processed <- c(deps_wnce, 
+                      nce_vulnerable_stats_dep_bdtopo_sub[, unique(INSEE_DEP)])
+  per_area_fr_processed <- ddtnets_dat[,
+    .SD[(INSEE_DEP %in% deps_processed), sum(POLY_AREA)]/sum(POLY_AREA)]
+  
+  return(list(
+    dep_analysis = nce_vulnerable_stats_dep_all,
+    fr_analysis = nce_vulnerable_stats_fr,
+    representativeness_vulnerable_nce_fr = representativeness_hdworires_in_nce_fr,
+    deps_processed = deps_processed,
+    per_area_fr_processed = per_area_fr_processed
+  ))
 
-  
-  
-  
-  ################### TO BE DONE ###############################################
-  #Bar chart of intermittent-river representativeness
-  p_intratio_bars_dep <- ggplot(
-    dep_stats[!duplicated(INSEE_DEP) & 
-                per_nce_determined_regime>0.5 &
-                per_nce>0.01,],
-    aes(x=reorder(INSEE_DEP,per_nce_intratio),
-        y=per_nce_intratio,
-        fill=nce_int_length/1000
-    )) +
-    geom_bar(stat='identity') +
-    geom_hline(yintercept=1) +
-    scale_x_discrete(name='Department number') +
-    scale_y_continuous(
-      name='Representativeness of intermittent rivers in segments classified as non-watercourses', 
-      expand=c(0,0)) +
-    scale_fill_distiller(name=str_wrap('Length of intermittent rivers classified
-                                       as non-watercourses (km)', 30),
-                         palette='Spectral', trans = "sqrt",
-                         breaks=c(2, 100, 500, 1000, 2000, 6000))+
-    #geom_text(aes(label=INSEE_DEP)) +
-    coord_flip() +
-    theme_bw() +
-    theme(
-      panel.grid.minor = element_blank(),
-      legend.position=c(0.8,0.2),
-      legend.background = element_blank()
-    )
-  
-  
-  #--- Intermittent analysis at BV level
-  #Compute the length of non-perennial segments classified as non-watercourse
-  #and the ratio between the share of non-perennial segments classified as non-watercourse
-  #to the share of non-perennial segments in the BV (to control for differences 
-  #in non-perennial segment prevalence)
-  int_nce_stats_bv <-   in_dt[, `:=`(
-    int_length = .SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
-    nce_int_length = .SD[type_stand=="Non cours d'eau" & 
-                           regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
-    per_nce_determined_regime = .SD[regime_formatted != 'undetermined' & 
-                                      type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]/
-      .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)],
-    per_nce_int = (
-      .SD[type_stand=="Non cours d'eau" & regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
-        .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]
-    )/
-      (.SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
-         .SD[, sum(length_cat_bv, na.rm=T)])
-  ), by='UID_BV']
-  merge(int_nce_stats_bv[!duplicated(UID_BV), 
-                         .(UID_BV, total_length_bv, per_int,
-                           per_ce, per_ind, per_nce, 
-                           int_length, nce_int_length,per_nce_determined_regime, 
-                           per_nce_intratio)], by='UID_BV')
 }
+
+#-------------------------- plot_vulnerable_analysis ---------------------------
+
+################### TO BE DONE ###############################################
+# #Bar chart of intermittent-river representativeness
+# p_intratio_bars_dep <- ggplot(
+#   dep_stats[!duplicated(INSEE_DEP) & 
+#               per_nce_determined_regime>0.5 &
+#               per_nce>0.01,],
+#   aes(x=reorder(INSEE_DEP,per_nce_intratio),
+#       y=per_nce_intratio,
+#       fill=nce_int_length/1000
+#   )) +
+#   geom_bar(stat='identity') +
+#   geom_hline(yintercept=1) +
+#   scale_x_discrete(name='Department number') +
+#   scale_y_continuous(
+#     name='Representativeness of intermittent rivers in segments classified as non-watercourses', 
+#     expand=c(0,0)) +
+#   scale_fill_distiller(name=str_wrap('Length of intermittent rivers classified
+#                                      as non-watercourses (km)', 30),
+#                        palette='Spectral', trans = "sqrt",
+#                        breaks=c(2, 100, 500, 1000, 2000, 6000))+
+#   #geom_text(aes(label=INSEE_DEP)) +
+#   coord_flip() +
+#   theme_bw() +
+#   theme(
+#     panel.grid.minor = element_blank(),
+#     legend.position=c(0.8,0.2),
+#     legend.background = element_blank()
+#   )
+# 
+# 
+# #--- Intermittent analysis at BV level
+# #Compute the length of non-perennial segments classified as non-watercourse
+# #and the ratio between the share of non-perennial segments classified as non-watercourse
+# #to the share of non-perennial segments in the BV (to control for differences 
+# #in non-perennial segment prevalence)
+# int_nce_stats_bv <-   in_dt[, `:=`(
+#   int_length = .SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
+#   nce_int_length = .SD[type_stand=="Non cours d'eau" & 
+#                          regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)],
+#   per_nce_determined_regime = .SD[regime_formatted != 'undetermined' & 
+#                                     type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]/
+#     .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)],
+#   per_nce_int = (
+#     .SD[type_stand=="Non cours d'eau" & regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
+#       .SD[type_stand=="Non cours d'eau", sum(length_cat_bv, na.rm=T)]
+#   )/
+#     (.SD[regime_formatted=='intermittent', sum(length_cat_bv, na.rm=T)]/
+#        .SD[, sum(length_cat_bv, na.rm=T)])
+# ), by='UID_BV']
+# merge(int_nce_stats_bv[!duplicated(UID_BV), 
+#                        .(UID_BV, total_length_bv, per_int,
+#                          per_ce, per_ind, per_nce, 
+#                          int_length, nce_int_length,per_nce_determined_regime, 
+#                          per_nce_intratio)], by='UID_BV')
+
 
 #-------------------------- plotmap_envdd_cors --------------------------------------
 # in_envdd_multivar_analysis = tar_read(envdd_multivar_analysis)

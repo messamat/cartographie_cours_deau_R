@@ -102,8 +102,10 @@ list(
   tar_target(ddtnets_bvinters, fread(ddtnets_bvinters_path)), #DDT harmonized networks
   
   #Read in csv of strahler order of ddt nets and networks
-  tar_target(ddtnets_strahler, fread(ddtnets_strahler_path)), 
-  tar_target(bdtopo_strahler, fread(bdtopo_strahler_path)),
+  tar_target(ddtnets_strahler, fread(ddtnets_strahler_path, 
+                                     select=c("UID_CE", "strahler"))), 
+  tar_target(bdtopo_strahler, fread(bdtopo_strahler_path,
+                                    select=c("ID", "strahler"))),
   
   #Read in csvs of environmental files
   tar_target(amber_bvinters, fread(amber_bvinters_path)), #barriers
@@ -368,21 +370,29 @@ list(
   ),
   
   tar_target(
-    mods_envdd,
-    build_mods_envdd(in_envdd_multivar_analysis = envdd_multivar_analysis,
+    mods_envdd_intradep,
+    build_mods_envdd_intradep(in_envdd_multivar_analysis = envdd_multivar_analysis,
                      in_drainage_density_summary = drainage_density_summary,
                      in_bvdep_inters_gdb_path = bvdep_inters_gdb_path)
   )
-  #,
-  # tar_target(
-  #   vulnerable_waters_analysis,
-  #   analyze_vulnerable_waters(
-  #     in_drainage_density_summary = drainage_density_summary,
-  #     in_bvdep_inters_gdb_path = bvdep_inters_gdb_path,
-  #     in_ddtnets_strahler = ddtnets_strahler,
-  #     in_bdtopo_strahler = bdtopo_strahler
-  #   )
-  # )
+  ,
+  
+  tar_target(
+    mods_envdd_interdep,
+    build_mods_envdd_intradep(in_drainage_density_summary = drainage_density_summary)
+  )
+  ,
+  
+  tar_target(
+    vulnerable_waters_analysis,
+    analyze_vulnerable_waters(
+      in_drainage_density_summary = drainage_density_summary,
+      in_ddtnets_strahler = ddtnets_strahler,
+      in_ddtnets_bvinters = ddtnets_bvinters_stats$ddtnets_bvinters_format,
+      in_bdtopo_strahler = bdtopo_strahler,
+      in_bdtopo_bvinters = bdtopo_bvinters
+    )
+  )
   #,
   #
   # tar_target(
