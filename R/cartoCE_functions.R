@@ -1486,7 +1486,7 @@ plot_envdd_dep <- function(in_drainage_density_summary,
                            in_bvdep_inters,
                            in_varnames) {
   
-  dep_stats <- in_drainage_density_summary$nets_stats_melt_dep
+  dep_stats <- in_drainage_density_summary$nets_stats_melt_dep[!(INSEE_DEP %in% c(75,92,93,94)),]
   
   #------------------------- Plots of drainage density and deviation -----------
   #Scartterplot of drainage density at department level (without Paris)
@@ -3212,11 +3212,365 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   ))
 }
 
-#-------------------------- build env-dd models inter department ---------------
-in_env_dd_merged_dep <- tar_read(env_dd_merged_dep)
-build_mods_envdd_intradep <- function(in_env_dd_merged_dep) {
+#-------------------------- export regression coefficients for mapping ---------
+# in_mods_envdd_intradep <- tar_read(mods_envdd_intradep)
+# in_envdd_multivar_analysis <- tar_read(envdd_multivar_analysis)
+
+export_envdd_coefs <- function(in_mods_envdd_intradep,
+                               in_envdd_multivar_analysis) {
+  gclass_deps <- in_envdd_multivar_analysis$env_dd_dep_cor_avg_morecl[
+    !duplicated(INSEE_DEP),
+    list(INSEE_DEP, gclass)]
+  
+  
+  # in_mods_list = in_mods_envdd_intradep
+  # in_gclass_deps=gclass_deps
+  # in_class = 3
+  # in_variable = 'wcr_pc_sse_sqrt'
+  # dep_id_varname='INSEE_DEP'
+  
+  extract_varcoefs_from_lm <- function(in_gclass_deps, in_mods_list, 
+                                       in_class, in_variable, 
+                                       dep_id_varname='INSEE_DEP') {
+    
+    deps_in_cl <- gclass_deps[gclass==in_class, dep_id_varname, with=F] #get departments in class
+    intradep_mod_list <- in_mods_envdd_intradep[[paste0('cl', in_class)]] #Get the corresponding output from modeling
+    mod_coefs <- summary(intradep_mod_list[[1]])$coefficients #Get coefs in original format
+    
+    coefs_sub_ix <- grep(paste0("(^", in_variable,"$)",
+                                "|(",dep_id_varname, "[0-9]{1,2}[:]", in_variable, "$)",
+                                "|(", in_variable,  "[:]", dep_id_varname, "[0-9]{1,2}$)"), 
+                         row.names(mod_coefs)) #Get which coefs associated with the variable (including interactions)
+ 
+    #if variable in model
+    if (length(coefs_sub_ix)>0) { 
+      coefs_p_values <- summary(intradep_mod_list[[1]])$coefficients[,4][coefs_sub_ix] 
+      
+      #If simple term
+      if (length(coefs_sub_ix) == 1) { 
+        out_dt <- data.table(dep_id=deps_in_cl[, get(dep_id_varname)],
+                             coef = mod_coefs[in_variable, 'Estimate'],
+                             pvalue = coefs_p_values)
+      } 
+      #If interaction with department
+      else { 
+        coefs_adjust <- mod_coefs[coefs_sub_ix, 'Estimate'][1] + 
+          mod_coefs[coefs_sub_ix, 'Estimate'][-1]
+        
+        out_dt <- data.table(dep_id = deps_in_cl[1, get(dep_id_varname)],
+                             coef = mod_coefs[coefs_sub_ix, 'Estimate'][[1]],
+                             pvalue = coefs_p_values[1]) %>%
+          rbind(data.table(dep_id = deps_in_cl[-1, get(dep_id_varname)],
+                           coef = coefs_adjust,
+                           pvalue = coefs_p_values[-1]))
+      }
+    } 
+    #If not in model
+    else { 
+      out_dt <- data.table(dep_id = deps_in_cl[, get(dep_id_varname)],
+                           coef = NA,
+                           pvalue = NA)
+    }
+    
+    setnames(out_dt, 'dep_id', dep_id_varname)
+    
+    out_dt[, variable := in_variable]
+    return(out_dt)
+  }
+  
+  wrc_pc_sse_sqrt_coefs <- lapply(gclass_deps[, unique(gclass)], 
+                                  function(gclass) {
+                                    extract_varcoefs_from_lm(
+                                      in_mods_list = in_mods_envdd_intradep,
+                                      in_gclass_deps=gclass_deps,
+                                      in_class = gclass,
+                                      in_variable = 'wcr_pc_sse_sqrt')
+                                  }) %>%
+    rbindlist 
+  
+  wrc_pc_sse_coefs <- lapply(gclass_deps[, unique(gclass)], 
+                                  function(gclass) {
+                                    extract_varcoefs_from_lm(
+                                      in_mods_list = in_mods_envdd_intradep,
+                                      in_gclass_deps=gclass_deps,
+                                      in_class = gclass,
+                                      in_variable = 'wcr_pc_sse')
+                                  }) %>%
+    rbindlist
+  
+  
+  ari_ix_ssu_coefs <- lapply(gclass_deps[, unique(gclass)], 
+                             function(gclass) {
+                               extract_varcoefs_from_lm(
+                                 in_mods_list = in_mods_envdd_intradep,
+                                 in_gclass_deps=gclass_deps,
+                                 in_class = gclass,
+                                 in_variable = 'ari_ix_ssu')
+                             }) %>%
+    rbindlist
+  
+  return(list(
+    wrc_pc_sse_sqrt = wrc_pc_sse_sqrt_coefs,
+    wrc_pc_sse = wrc_pc_sse_coefs,
+    ari_ix_ssu_coefs =  ari_ix_ssu_coefs
+  ))
   
 }
+
+#-------------------------- build env-dd models inter department ---------------
+# in_env_dd_merged_dep <- tar_read(env_dd_merged_dep)
+# in_varnames <- tar_read(varnames)
+# in_deps_shp_path=tar_read(deps_shp_path)
+
+build_mods_envdd_interdep <- function(in_env_dd_merged_dep,
+                                      in_varnames,
+                                      in_deps_shp_path) {
+  
+  deps_vect <-  vect(in_deps_shp_path) %>%
+    terra::simplifyGeom(tolerance=1000,
+                        preserveTopology=T,
+                        makeValid=T)
+  
+  dep_dat <- in_env_dd_merged_dep[variable=='bdtopo', 
+                                  -c('variable'), with=F] %>%
+    .[!(INSEE_DEP %in% c(75, 92, 93, 94)),] #Exclude Ile-de-France
+  
+  dep_dat[, bar_bk_ssu_TOTAL_sqrt := sqrt(bar_bk_ssu_TOTAL)]
+  
+  in_varnames <- rbind(in_varnames,
+                       data.table(variable='bar_bk_ssu_TOTAL_sqrt',
+                                  description='sqrt(Barrier density)'))
+  #--------- Compute Spearman's correlation between all env and dd -------------
+  driver_cols_dt <- data.table(
+    driver=c('agr_pc_sse'
+             , 'pst_pc_sse'
+             , 'wcr_pc_sse'
+             , 'orc_pc_sse'
+             , 'vny_pc_sse'
+             , 'awc_mm_sav'
+             , 'imp_pc_sse'
+             , 'ppc_pk_sav'
+             , 'ari_ix_ssu'
+             , 'ari_ix_syr'
+             , 'irs_pc_sav'
+             , 'ire_pc_sse'
+             # , 'vww_mk_syr_Souterrain_IRRIGATION' #Do not include because inconsistent across departments
+             # , 'vww_mk_syr_Souterrain_EAU_POTABLE'
+             # , 'vww_mk_syr_Surface_continental_IRRIGATION'
+             # , 'vww_mk_syr_Surface_continental_EAU_POTABLE'
+             , 'slo_dg_sav'
+             , 'bar_bk_ssu_TOTAL'
+             , 'bar_bk_ssu_TOTAL_sqrt')
+  ) %>%
+    merge(in_varnames, by.x='driver', by.y='variable', sort=F) 
+  stat_cols <- c('INSEE_DEP', 'lengthratio_ddt_ce_to_other',
+                 'lengthratio_ddt_ceind_to_other','per_ce', 'per_nce')
+  driver_cols_dt[, description := factor(description, levels=.SD[,description])] 
+  
+  env_dd_dep_melt <- melt(
+    dep_dat[, c(driver_cols_dt$driver, stat_cols), with=F],
+    id.vars=stat_cols) %>%
+    merge(in_varnames, by='variable', sort=F) 
+    
+  env_dd_dep_cor <-  env_dd_dep_melt[, list(
+    cor= .SD[!is.na(value), 
+             cor(lengthratio_ddt_ceind_to_other, value, method='spearman')]
+    )
+    , by=description]
+  
+  #-------------------- Build a few models to show relationships ---------------
+  postprocess_frmodel <- function(in_mod, in_dat) {
+    
+    smr <- summary(in_mod)
+    #dat_copy<- copy(in_dat) 
+    
+    mod_name <- paste(names(in_mod$model)[2:length(names(in_mod$model))], 
+                      collapse='_') %>%
+      gsub("_[(]weights[)]", "", .)
+    res_name <- paste('residuals', mod_name, sep="_")
+    
+    #Check distributions of residuals
+    if (length(in_mod$coefficients)>1) {
+      nsp_diag <- gg_diagnose(in_mod)
+    } else {
+      nsp_diag <- NULL
+    }
+    
+    #Check correlations of other variables with residuals
+    in_dat[, (res_name) := residuals(in_mod)]
+    
+    #Plot residual correlations with other variables
+    resid_env_p <- ggplot(melt(
+      in_dat[,c(driver_cols_dt$driver, stat_cols, res_name), with=F], 
+      id.vars=c(stat_cols,res_name)
+    ), aes(x=value, y=get(res_name))) +
+      geom_point(alpha=1/3) +
+      geom_smooth(method='rlm', color='black', se=F) +
+      facet_wrap(~variable, scales='free_x') +
+      theme_bw()
+    
+    return(list(
+      smr=smr,
+      nsp_diag=nsp_diag,
+      resid_env_p=resid_env_p
+    ))
+  }
+  
+  ggplot(dep_dat, aes(x=pst_pc_sse, y=lengthratio_ddt_ceind_to_other)) +
+    geom_point() +
+    scale_y_log10() +
+    geom_smooth(method='lm')
+  
+  #Model 0: null 
+  mod0 <- lm(lengthratio_ddt_ceind_to_other ~ 1,
+             data=dep_dat)
+  
+  #Model 1: DD ratio ~ pasture
+  mod1 <- lm(lengthratio_ddt_ceind_to_other~pst_pc_sse,
+             data=dep_dat)
+  mod1_diagnostics<- postprocess_frmodel(in_mod=mod1,
+                                       in_dat = dep_dat)
+  mod1_diagnostics$smr
+  mod1_diagnostics$resid_env_p
+  
+  #Model 2: irrigation extent
+  mod2 <- lm(lengthratio_ddt_ceind_to_other~ire_pc_sse,
+             data=dep_dat)
+  mod2_diagnostics<- postprocess_frmodel(in_mod=mod2,
+                                         in_dat = dep_dat)
+  mod2_diagnostics$smr
+  mod2_diagnostics$resid_env_p
+  
+  #Model 3: barrier density
+  mod3 <- lm(lengthratio_ddt_ceind_to_other~bar_bk_ssu_TOTAL_sqrt,
+             data=dep_dat)
+  mod3_diagnostics<- postprocess_frmodel(in_mod=mod3,
+                                         in_dat = dep_dat)
+  mod3_diagnostics$smr
+  mod3_diagnostics$resid_env_p
+  
+  #Model 4: mean summer aridity
+  mod4 <- lm(lengthratio_ddt_ceind_to_other~ari_ix_ssu,
+             data=dep_dat)
+  mod4_diagnostics<- postprocess_frmodel(in_mod=mod4,
+                                         in_dat = dep_dat)
+  mod4_diagnostics$smr
+  mod4_diagnostics$resid_env_p
+  
+  #Model 5: pasture extent + mean summer aridity
+  mod5 <- lm(lengthratio_ddt_ceind_to_other ~ pst_pc_sse + ari_ix_ssu,
+             data=dep_dat)
+  mod5_diagnostics<- postprocess_frmodel(in_mod=mod5,
+                                         in_dat = dep_dat)
+  mod5_diagnostics$smr
+  mod5_diagnostics$resid_env_p
+  
+  #Model 6: irrigated extent + mean summer aridity
+  mod6 <- lm(lengthratio_ddt_ceind_to_other ~ ire_pc_sse + ari_ix_ssu,
+             data=dep_dat)
+  mod6_diagnostics<- postprocess_frmodel(in_mod=mod6,
+                                         in_dat = dep_dat)
+  mod6_diagnostics$smr
+  mod6_diagnostics$resid_env_p
+  
+  #Model 7: agricultural extent + irrigated extent + mean summer aridity
+  mod7 <- lm(lengthratio_ddt_ceind_to_other ~ agr_pc_sse + ire_pc_sse + ari_ix_ssu,
+             data=dep_dat)
+  mod7_diagnostics<- postprocess_frmodel(in_mod=mod7,
+                                         in_dat = dep_dat)
+  vif(mod7)
+  mod7_diagnostics$smr
+  mod7_diagnostics$resid_env_p
+  
+  #Model 8: agricultural extent + irrigated extent + mean summer aridity 
+  #         + barrier density
+  mod8 <- lm(lengthratio_ddt_ceind_to_other ~ agr_pc_sse + ire_pc_sse 
+             + ari_ix_ssu + bar_bk_ssu_TOTAL_sqrt,
+             data=dep_dat)
+  mod8_diagnostics<- postprocess_frmodel(in_mod=mod8,
+                                         in_dat = dep_dat)
+  vif(mod8)
+  mod8_diagnostics$smr
+  mod8_diagnostics$resid_env_p
+  
+  #Model 9: pasture extent+ mean summer aridity + barrier density
+  mod9 <- lm(lengthratio_ddt_ceind_to_other ~ pst_pc_sse + ari_ix_ssu + bar_bk_ssu_TOTAL_sqrt,
+             data=dep_dat)
+  mod9_diagnostics<- postprocess_frmodel(in_mod=mod9,
+                                         in_dat = dep_dat)
+  vif(mod9)
+  mod9_diagnostics$smr
+  mod9_diagnostics$resid_env_p
+  
+  #Model 10: agricutlural extent + irrigated extent + mean summer aridity 
+  #         + barrier density + poplation
+  mod10 <- lm(lengthratio_ddt_ceind_to_other ~ agr_pc_sse + ire_pc_sse 
+             + ari_ix_ssu + bar_bk_ssu_TOTAL_sqrt + log(ppc_pk_sav),
+             data=dep_dat)
+  mod10_diagnostics<- postprocess_frmodel(in_mod=mod10,
+                                         in_dat = dep_dat)
+  vif(mod10)
+  mod10_diagnostics$smr
+  mod10_diagnostics$resid_env_p
+  
+  #Model 11: agrc_pc_sse + irrigated extent + mean summer aridity 
+  #         + barrier density + impervious
+  mod11 <- lm(lengthratio_ddt_ceind_to_other ~ agr_pc_sse + ire_pc_sse 
+              + ari_ix_ssu + bar_bk_ssu_TOTAL_sqrt + imp_pc_sse,
+              data=dep_dat)
+  mod11_diagnostics<- postprocess_frmodel(in_mod=mod11,
+                                          in_dat = dep_dat)
+  vif(mod11)
+  mod11_diagnostics$smr
+  mod11_diagnostics$resid_env_p
+  res_name <- "residuals_agr_pc_sse_ire_pc_sse_ari_ix_ssu_bar_bk_ssu_TOTAL_sqrt_imp_pc_sse" 
+  
+  #Chose model 11
+  #Spatial analysis of model
+  dep_dat[, INSEE_DEP := str_pad(as.character(INSEE_DEP), 2, pad = "0")]
+  
+  resids_sp <- merge(deps_vect,
+                     dep_dat[, c('INSEE_DEP', res_name), with=F],
+                     by='INSEE_DEP')
+  resids_sp_p <- ggplot(resids_sp) +
+    geom_spatvector(aes_string(fill=res_name)) +
+    scale_fill_distiller(palette='Spectral')
+  
+  #Compute k nearest neighbor list 
+  id <- resids_sp$INSEE_DEP
+  coords <- coordinates(as(resids_sp, 'Spatial'))
+  dat_nb <- knn2nb(knearneigh(coords, k = 6), row.names = id)
+  plot(as(resids_sp, 'Spatial'))
+  plot(dat_nb, coords, add=T, main = "KNN = 6 Neighborhood")
+  
+  #Assign weight to neighborhood based on idw (power 2) - globally standardized
+  wlist <- nb2listwdist(neighbours=dat_nb, 
+                        x=as(resids_sp, 'Spatial'), type="idw", style="C", 
+                        alpha = 2, dmax = NULL, longlat = NULL, zero.policy=NULL)
+  #nb2listw(dat_nb4, style = "B", zero.policy = T)
+
+  #Run moran's test
+  moran_lm <- lm.morantest(mod11, wlist)
+  
+  #Lagrange multiplier diagnostic tests for spatial dependence
+  #Test for error dependence (LMerr) and 
+  # test for missing spatially lagged dependent variable (LMlag)
+  LMtests <- lm.LMtests(mod11, wlist, test = "all")
+  
+  #Check MAE
+  mae_null <- mae(mod0$model$lengthratio_ddt_ceind_to_other,
+                  mod0$fitted.values)
+  mae_chosen_model <- mae(mod11$model$lengthratio_ddt_ceind_to_other,
+                          mod11$fitted.values)
+    
+  return(list(
+    env_dd_dep_cor = env_dd_dep_cor,
+    chosen_model = mod11,
+    chosen_model_diagnostics = mod11_diagnostics,
+    chosen_model_resids_sp_p = resids_sp_p
+  ))
+  }
+
 
 
 #-------------------------- analyze vulnerable waters --------------------------

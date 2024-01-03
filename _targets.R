@@ -372,14 +372,23 @@ list(
   tar_target(
     mods_envdd_intradep,
     build_mods_envdd_intradep(in_envdd_multivar_analysis = envdd_multivar_analysis,
-                     in_drainage_density_summary = drainage_density_summary,
-                     in_bvdep_inters_gdb_path = bvdep_inters_gdb_path)
+                              in_drainage_density_summary = drainage_density_summary,
+                              in_bvdep_inters_gdb_path = bvdep_inters_gdb_path)
   )
   ,
   
   tar_target(
+    selected_envdd_coefs,
+    export_envdd_coefs(in_mods_envdd_intradep = mods_envdd_intradep,
+                       in_envdd_multivar_analysis = envdd_multivar_analysis
+    )
+  ),
+  
+  tar_target(
     mods_envdd_interdep,
-    build_mods_envdd_intradep(in_drainage_density_summary = drainage_density_summary)
+    build_mods_envdd_interdep(in_env_dd_merged_dep=env_dd_merged_dep,
+                              in_varnames=varnames,
+                              in_deps_shp_path=deps_shp_path)
   )
   ,
   
