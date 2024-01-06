@@ -384,6 +384,17 @@ list(
     )
   ),
   
+  #Write model coefs CSV. May need to write in schema.ini file for correct import to ArcGIS PRo
+  tar_target(
+    envdd_coefs_tab,
+    lapply(selected_envdd_coefs, function(tab) {
+      fwrite(tab, 
+             file.path(resdir, 
+                       paste0('envdd_intradep_coef_', tab$variable[[1]],".csv"))
+      )
+    })
+  ),
+  
   tar_target(
     mods_envdd_interdep,
     build_mods_envdd_interdep(in_env_dd_merged_dep=env_dd_merged_dep,
@@ -401,6 +412,20 @@ list(
       in_bdtopo_strahler = bdtopo_strahler,
       in_bdtopo_bvinters = bdtopo_bvinters
     )
+  ),
+  
+  tar_target(
+    vulnerable_waters_analysis_tabs,
+    {
+      vulnerable_waters_analysis$dep_analysis[
+        strahler=='1', .(INSEE_DEP, order_nce_representativeness)] %>%
+        .[, INSEE_DEP := str_pad(as.character(INSEE_DEP), 2, pad = "0")] %>%
+        fwrite(file.path(resdir, 'vulnerable_waters_analysis_hdw.csv'));
+      vulnerable_waters_analysis$dep_analysis[
+        strahler=='total', .(INSEE_DEP, ires_nce_representativeness)] %>%
+        .[, INSEE_DEP := str_pad(as.character(INSEE_DEP), 2, pad = "0")] %>%
+        fwrite(file.path(resdir, 'vulnerable_waters_analysis_ires.csv'))
+    }
   )
   #,
   #

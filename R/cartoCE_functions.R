@@ -1968,7 +1968,7 @@ corclus_envdd_bv <- function(in_env_dd_merged_bv,
 
 
 #-------------------------- build env-dd models intra department  ---------------------------------
-#in_envdd_multivar_analysis=tar_read(envdd_multivar_analysis)
+# in_envdd_multivar_analysis=tar_read(envdd_multivar_analysis)
 # in_drainage_density_summary=tar_read(drainage_density_summary)
 # in_bvdep_inters_gdb_path=tar_read(bvdep_inters_gdb_path)
 
@@ -2035,6 +2035,13 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
                     .SDcols = ww_cols]
     env_dd_cast_sub[, (ww_cols) := NULL]
     
+   
+    env_dd_cast_sub[, bar_bk_ssu_TOTAL_sqrt := sqrt(bar_bk_ssu_TOTAL)]  #Transform barrier density variable
+    env_dd_cast_sub[, bar_bk_ssu_TOTAL := NULL]
+    env_dd_cast_sub[, wcr_pc_sse_sqrt := sqrt(wcr_pc_sse)] #Transform winter crop extent
+    env_dd_cast_sub[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]   #Transform population
+    
+    #Re-melt data
     env_dd_melt_sub <- melt(env_dd_cast_sub, id.vars = id_vars) %>%
       merge(in_dt_melt[gclass==in_gclass, c('UID_BV', 'cor', 'variable')],
             by=c('UID_BV', 'variable'))
@@ -2385,8 +2392,11 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   
   ggplot(dat_for_mod_cl2$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
     geom_histogram() 
+  
+  dat_for_mod_cl2$dat_cast[ddt_to_bdtopo_ddratio_ceind==0,]
+  
   ggplot(dat_for_mod_cl2$dat_cast, 
-         aes(x=wcr_pc_sse, y=ddt_to_bdtopo_ddratio_ceind)) +
+         aes(x=wcr_pc_sse_sqrt, y=ddt_to_bdtopo_ddratio_ceind)) +
     geom_point() +
     geom_smooth(method='lm')
   
@@ -2398,7 +2408,7 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
                                             spatial_analysis = F)
   
   #Model 1: dd ratio ~ winter crops
-  cl2_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse,
+  cl2_mod1 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt,
                  data=dat_for_mod_cl2$dat_cast)
   
   cl2_mod1_diagnostics <- postprocess_model(in_mod = cl2_mod1,
@@ -2413,7 +2423,7 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   dat_for_mod_cl2$dat_sp <- dat_for_mod_cl2$dat_sp[
     dat_for_mod_cl2$dat_sp$ddt_to_bdtopo_ddratio_ceind>0,]
   
-  cl2_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse,
+  cl2_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind~wcr_pc_sse_sqrt,
                  data=dat_for_mod_cl2$dat_cast)
   
   cl2_mod2_diagnostics <- postprocess_model(in_mod = cl2_mod2,
@@ -2458,13 +2468,11 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   ggplot(dat_for_mod_cl3$dat_cast, aes(x=ddt_to_bdtopo_ddratio_ceind)) +
     geom_histogram() 
   ggplot(dat_for_mod_cl3$dat_cast, 
-         aes(x=sqrt(ppc_pk_sav), y=ddt_to_bdtopo_ddratio_ceind)) +
+         aes(x=ppc_pk_sav_sqrt, y=ddt_to_bdtopo_ddratio_ceind)) +
     geom_point() +
     geom_smooth(method='lm')
   
   dat_for_mod_cl3$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
-  dat_for_mod_cl3$dat_cast[, wcr_pc_sse_sqrt := sqrt(wcr_pc_sse)]
-  dat_for_mod_cl3$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
   
   #Model 0: null model - dd ratio ~ dep
   cl3_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
@@ -2603,8 +2611,6 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
     geom_smooth(method='lm', se=F)
   
   dat_for_mod_cl4$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
-  dat_for_mod_cl4$dat_cast[, wcr_pc_sse_sqrt := sqrt(wcr_pc_sse)]
-  dat_for_mod_cl4$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
   
   #Model 0: null model - dd ratio ~ dep
   cl4_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
@@ -2729,8 +2735,6 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
     geom_smooth(method='lm', se=F)
   
   dat_for_mod_cl5$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
-  dat_for_mod_cl5$dat_cast[, wcr_pc_sse_sqrt := sqrt(wcr_pc_sse)]
-  dat_for_mod_cl5$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
   
   dat_for_mod_cl5$dat_cast[duplicated(ddt_to_bdtopo_ddratio_ceind),]
   
@@ -2811,7 +2815,6 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   
   dat_for_mod_cl6$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
   dat_for_mod_cl6$dat_cast[, pst_pc_sse_sqrt := sqrt(pst_pc_sse)]
-  dat_for_mod_cl6$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
   
   #Model 0: null model - dd ratio ~ dep
   cl6_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
@@ -2912,7 +2915,6 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
     geom_smooth(method='lm', se=F, aes(weight=bv_area))
   
   dat_for_mod_cl7$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
-  dat_for_mod_cl7$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
   
   ## determine the column names that contain NA values
   nm <- names(dat_for_mod_cl7$dat_cast)[
@@ -2924,8 +2926,8 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
     x
   }), by = 'INSEE_DEP']
   
-  dat_for_mod_cl7$dat_cast[is.infinite(bar_bk_ssu_TOTAL), 
-                           bar_bk_ssu_TOTAL := 0]
+  dat_for_mod_cl7$dat_cast[is.infinite(bar_bk_ssu_TOTAL_sqrt), 
+                           bar_bk_ssu_TOTAL_sqrt := 0]
   
   #Model 0: null model - dd ratio ~ dep
   cl7_mod0 <- lm(ddt_to_bdtopo_ddratio_ceind~INSEE_DEP,
@@ -3044,9 +3046,7 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   
   
   dat_for_mod_cl8$dat_cast[, INSEE_DEP := as.factor(INSEE_DEP)]
-  dat_for_mod_cl8$dat_cast[, ppc_pk_sav_sqrt := sqrt(ppc_pk_sav)]
-  dat_for_mod_cl8$dat_cast[, bar_bk_ssu_TOTAL_sqrt := sqrt(bar_bk_ssu_TOTAL)]
-  
+
   ggplot(dat_for_mod_cl8$dat_cast, 
          aes(x= bar_bk_ssu_TOTAL_sqrt, y=ddt_to_bdtopo_ddratio_ceind,
              color=INSEE_DEP, size=bv_area)) +
@@ -3138,7 +3138,7 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   
   #Model 2: dd ratio ~ irrigatoin*dep + winter crops
   cl9_mod2 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ire_pc_sse_sqrt*INSEE_DEP +
-                   wcr_pc_sse,
+                   wcr_pc_sse_sqrt,
                  data=dat_for_mod_cl9$dat_cast,
                  weights=dat_for_mod_cl9$dat_cast$bv_area)
   
@@ -3167,11 +3167,9 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   
   #Model 4: dd ratio ~ irrigatoin*dep + winter crops + imperviousness
   cl9_mod4 <- lm(ddt_to_bdtopo_ddratio_ceind ~ ire_pc_sse_sqrt*INSEE_DEP +
-                   wcr_pc_sse + imp_pc_sse,
+                   wcr_pc_sse_sqrt + imp_pc_sse,
                  data=dat_for_mod_cl9$dat_cast,
                  weights=dat_for_mod_cl9$dat_cast$bv_area)
-  
-  dat_for_mod_cl9$dat_cast[, which(is.na(wcr_pc_sse))]
   
   cl9_mod4_diagnostics <- postprocess_model(in_mod = cl9_mod4,
                                             in_dat_for_mod = dat_for_mod_cl9,
@@ -3222,13 +3220,12 @@ export_envdd_coefs <- function(in_mods_envdd_intradep,
     !duplicated(INSEE_DEP),
     list(INSEE_DEP, gclass)]
   
-  
+  #For texting
   # in_mods_list = in_mods_envdd_intradep
   # in_gclass_deps=gclass_deps
   # in_class = 3
   # in_variable = 'wcr_pc_sse_sqrt'
   # dep_id_varname='INSEE_DEP'
-  
   extract_varcoefs_from_lm <- function(in_gclass_deps, in_mods_list, 
                                        in_class, in_variable, 
                                        dep_id_varname='INSEE_DEP') {
@@ -3286,18 +3283,8 @@ export_envdd_coefs <- function(in_mods_envdd_intradep,
                                       in_class = gclass,
                                       in_variable = 'wcr_pc_sse_sqrt')
                                   }) %>%
-    rbindlist 
-  
-  wrc_pc_sse_coefs <- lapply(gclass_deps[, unique(gclass)], 
-                                  function(gclass) {
-                                    extract_varcoefs_from_lm(
-                                      in_mods_list = in_mods_envdd_intradep,
-                                      in_gclass_deps=gclass_deps,
-                                      in_class = gclass,
-                                      in_variable = 'wcr_pc_sse')
-                                  }) %>%
-    rbindlist
-  
+    rbindlist %>%
+    .[, INSEE_DEP := str_pad(as.character(INSEE_DEP), 2, pad = "0")]
   
   ari_ix_ssu_coefs <- lapply(gclass_deps[, unique(gclass)], 
                              function(gclass) {
@@ -3307,12 +3294,12 @@ export_envdd_coefs <- function(in_mods_envdd_intradep,
                                  in_class = gclass,
                                  in_variable = 'ari_ix_ssu')
                              }) %>%
-    rbindlist
+    rbindlist %>%
+    .[, INSEE_DEP := str_pad(as.character(INSEE_DEP), 2, pad = "0")]
   
   return(list(
     wrc_pc_sse_sqrt = wrc_pc_sse_sqrt_coefs,
-    wrc_pc_sse = wrc_pc_sse_coefs,
-    ari_ix_ssu_coefs =  ari_ix_ssu_coefs
+    ari_ix_ssu =  ari_ix_ssu_coefs
   ))
   
 }
@@ -3607,13 +3594,13 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
   
   #Function to compute statistics by stream order
   comp_nce_ires_stats_byorder <- function(in_dt) {
-    total_length_fr_w_nce<- in_dt[ #total length in deps with nce data
+    total_length_fr<- in_dt[ #total length in deps with nce data
       , sum(geom_Length)]
     
-    per_nce_fr_w_nce <- in_dt[ #% length in deps with nce data
+    per_nce_fr <- in_dt[ #% length in deps with nce data
       , .SD[type_stand == "Non cours d'eau", sum(geom_Length)]/sum(geom_Length)]
     
-    total_length_fr_w_nce_andregime <- in_dt[ #total length in deps with nce and regime data
+    total_length_fr_w_regime <- in_dt[ #total length in deps with nce and regime data
       (regime_formatted=='intermittent'), 
       sum(geom_Length)]
     
@@ -3640,7 +3627,7 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
                               sum(geom_Length)],
         #% of total network length that is of this order 
         per_length_order = (sum(geom_Length)/ 
-                              total_length_fr_w_nce),
+                              total_length_fr),
         #% of length of that order that is NCE 
         per_nce = (.SD[type_stand == "Non cours d'eau", sum(geom_Length)] 
                    /sum(geom_Length)),
@@ -3654,12 +3641,12 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
       ), by=strahler] %>%
       .[,`:=`(
         #% of the total NCE length that is in that order
-        per_nce_length_order = (length_nce/(per_nce_fr_w_nce*total_length_fr_w_nce)), 
+        per_nce_length_order = (length_nce/(per_nce_fr*total_length_fr)), 
         #% of the total IRES length that is in that order
-        per_ires_length_order = (length_ires/(total_length_fr_w_nce_andregime)), 
+        per_ires_length_order = (length_ires/(total_length_fr_w_regime)), 
         #Ratio of % length of that order in NCE to % length of that order in total
-        order_nce_representativeness = ((length_nce/(per_nce_fr_w_nce*total_length_fr_w_nce)) 
-                                        /(length_order/total_length_fr_w_nce))
+        order_nce_representativeness = ((length_nce/(per_nce_fr*total_length_fr)) 
+                                        /(length_order/total_length_fr))
       ), by=strahler]
     
     return(hdw_ires_analyzed)
@@ -3701,6 +3688,12 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
     .[, stats_source := 'ddtnets']
   
   #--- Compute representativeness of vulnerable waters in NCE at departmental level
+  #Representativeness of IRES alone (by order and in total)
+  nce_vulnerable_stats_dep[
+    , ires_nce_representativeness := ((length_nce_ires/length_nce_determined)
+                                      /(length_ires/length_determined)),
+    by=INSEE_DEP]
+  
   #Percentage of NCE with a determined regime that are either IRES or headwaters
   nce_vulnerable_stats_dep[
     , per_nce_hdworires := ((.SD[strahler %in% c(1), sum(length_nce_determined)] 
@@ -3827,9 +3820,12 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
     geom_point() +
     geom_text(aes(label=INSEE_DEP)) +
     geom_abline() +
-    scale_x_log10() +
-    scale_y_log10()
-  #The match is very good, so BDTOPO can be used this way for the assessment
+    scale_x_log10(breaks=c(2.5*10^5, 5*10^5, 10^6, 2.5*10^6, 5*10^6, 10^7)) +
+    scale_y_log10() +
+    coord_fixed() +
+    theme_bw() +
+    theme(panel.grid.minor = element_blank())
+  #The match is good, so BDTOPO can be used this way for the assessment
   
   #--- Compute representativeness of vulnerable waters in NCE at departmental level
   #For subset of departments that need and can be analyzed with BDTOPO
@@ -3838,6 +3834,12 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
     !(INSEE_DEP %in%  deps_wnce) &
       (INSEE_DEP %in% ddtnets_dat[type_stand %in% c("Cours d'eau", "Indéterminé") & 
                                     per_bdtopo_determined_dep > 0.9, INSEE_DEP]),]
+  
+  #Representativeness of IRES alone (by order and in total)
+  nce_vulnerable_stats_dep_bdtopo_sub[
+    , ires_nce_representativeness := ((length_nce_ires/length_nce)
+                                      /(length_ires/length_order)),
+    by=INSEE_DEP]
   
   #Percentage of NCE with a determined regime that are either IRES or headwaters
   nce_vulnerable_stats_dep_bdtopo_sub[
@@ -3864,7 +3866,7 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
   ) %>%
     .[stats_source=='bdtopo', ':='(length_nce_determined = length_nce,
                                    length_determined = length_order)]
-
+  
   #Compute statistics at national level-----------------------------------------
   nce_vulnerable_stats_fr <- nce_vulnerable_stats_dep_all[
     , sum_nce_ires_stats(.SD), by=strahler] %>%
@@ -3876,17 +3878,22 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
   total_length_ires_fr_wncedat <- nce_vulnerable_stats_fr[strahler=='total', length_ires] #total length in deps with nce data
   
   nce_vulnerable_stats_fr[,`:=`(
-      #% of the total length that is in that order
-      per_length_order = (length_order/total_length_fr_wncedat),
-      #% of the total NCE length that is in that order
-      per_nce_length_order = (length_nce/total_length_nce_fr_wncedat), 
-      #% of the total IRES length that is in that order
-      per_ires_length_order = (length_ires/total_length_ires_fr_wncedat), 
-      #Ratio of % of the total NCE length that is in that order to % length of total length that is in that order
-      order_nce_representativeness = ((length_nce/total_length_nce_fr_wncedat)
-                                      /(length_order/total_length_fr_wncedat))
-    ),
-    by=strahler]
+    #% length with determined flow permanence status
+    per_determined = length_determined/length_order,
+    #% of the total length that is in that order
+    per_length_order = (length_order/total_length_fr_wncedat),
+    #% of the total NCE length that is in that order
+    per_nce_length_order = (length_nce/total_length_nce_fr_wncedat), 
+    #% of the total IRES length that is in that order
+    per_ires_length_order = (length_ires/total_length_ires_fr_wncedat), 
+    #Ratio of % of the total NCE length that is in that order to % length of total length that is in that order
+    order_nce_representativeness = ((length_nce/total_length_nce_fr_wncedat)
+                                    /(length_order/total_length_fr_wncedat)),
+    #Ratio of % of the total NCE length that is an IRES in that order to % length of IRES in that order
+    ires_nce_representativeness =  ((length_nce_ires/length_nce)
+                                     /(length_ires/length_order))
+  ),
+  by=strahler]
   
   #--- Compute representativeness of vulnerable waters in NCE at national level
   #Percentage of NCE with a determined regime that are either IRES or headwaters
