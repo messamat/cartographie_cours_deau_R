@@ -10,6 +10,7 @@ execute:
 
 ```{r load-data}
 library(data.table)
+library(flextable)
 library(equatiomatic)
 library(ggplot2)
 library(MASS)
@@ -22,6 +23,8 @@ tar_load(ddt_nets_colnas)
 tar_load(envdd_dep_plots)
 tar_load(missing_ddtdata_bvs)
 tar_load(expertise_effort)
+tar_load(vulnerable_waters_analysis)
+tar_load(mods_envdd_interdep)
 
 knit_print.integer = function(x, ...) {
   prettyNum(x, big.mark=",")
@@ -298,7 +301,7 @@ ggplot(dep_stats_cast[(!(INSEE_DEP %in% c(75,92,93,94))),], aes(x=bdtopo, y=rht)
   geom_smooth(method='rlm')
 ```
 
-### Correlates of drainage density ratio across departments
+## Correlates of drainage density ratio across departments
 
 When relating drainage density ratios to environmental variables at the department level, several patterns appear. Compared to BD Topo, the length of geographic features classified as watercourses by DDTs decreased with aridity, the number of barriers per kilometer of river, the area under irrigation and the volume of water withdrawn for irrigation per unit area (both from ground- and surface water). in other words, a greater proportion of hydrographic features are deemed not to be watercourses in departments with drier climates, more fragmented river networks and more intense levels of water withdrawals. As expected, drainage density ratio also slightly increases with the proportion of the department's area used for agriculture and the available water capacity of the soil.
 
@@ -328,6 +331,23 @@ ggplot(drainage_density_summary$nets_stats_merged_bv[
 ```
 
 This nested variability is also visible spatially
+
+```{r interdep_mod}
+
+mods_envdd_interdep$env_dd_dep_cor %>%
+  as.data.table %>%
+  setnames('cor', "Spearman's rho") %>%
+  flextable() %>%
+  theme_vanilla %>%
+  border_inner_h(fp_border_default(width = 0)) %>%
+  colformat_double(digits=2)
+
+mods_envdd_interdep$chosen_model_diagnostics
+
+
+```
+
+`r equatiomatic::extract_eq(mods_envdd_interdep$chosen_model, use_coefs=T)`
 
 ## Correlates within departments
 
@@ -366,9 +386,74 @@ eqs_kable <- knitr::kable(mod_eqs)
 
 `r eqs_kable`
 
+## Representativeness of vulnerable waters
+
+'Non-perennial length (km)', '% non-watercourse',
+
+'% non-perennial',
+
+'% non-watercourse and non-perennial',
+
+'% length with flow permanence status',
+
+'Strahler order representativeness',
+
+'Non-perennial representativeness'
+
+```{r vulnerable waters analysis}
+#| label: tbl-stats
+#| tbl-cap: ""
+
+out_tab <- vulnerable_waters_analysis$fr_analysis %>%
+  as.data.table 
+
+out_tab[is.na(strahler), strahler := 'Undetermined']
+out_tab[, strahler := factor(str_to_title(strahler),
+                             levels=c('1', '2', '3', '4', 'Undetermined', 'Total'))]
+
+
+
+old_cols_sel <- c('strahler', 'length_order', 'length_nce', 'length_ires',
+                  'per_nce', 'per_ires', 'per_nce_ires', 'per_determined',
+                  'order_nce_representativeness', 'ires_nce_representativeness')
+new_cols_sel <- c('Strahler order', 
+                  'Length (103 km)',
+                  'Non-watercourse length (103 km)',
+                  'Non-perennial length (103 km)', 
+                  '% non-watercourse', 
+                  '% non-perennial', 
+                  '% non-watercourse and non-perennial',
+                  '% length with flow permanence status',
+                  'Strahler order representativeness in non-watercourses', 
+                  'Non-perennial representativeness in non-watercourses')
+
+setnames(out_tab, old_cols_sel, new_cols_sel) 
+set_flextable_defaults(font.family = "Calibri")
+ 
+thousands_format <- function(x) format(round(x/1000, 0), big.mark = ",")
+pct_format <- function(x) paste0(format(round(100*x)), '%')
+
+flextable(out_tab[order(`Strahler order`), new_cols_sel, with=F]) %>%
+  colformat_num(big.mark = ",") %>%
+  set_formatter(
+    `Length (103 km)` = thousands_format,
+    `Non-watercourse length (103 km)`= thousands_format,
+    `Non-perennial length (103 km)`= thousands_format,
+    `% non-watercourse` = pct_format,
+    `% non-perennial` = pct_format,
+    `% non-watercourse and non-perennial` = pct_format,
+    `% length with flow permanence status` = pct_format,
+    `Strahler order representativeness in non-watercourses` = function(x) round(x,2),
+    `Non-perennial representativeness in non-watercourses` = function(x) round(x,2)
+  ) %>%
+  theme_vanilla %>%
+  border_inner_h(fp_border_default(width = 0))
+```
+
 ## Coverage of cartography
 
 ```{r coverage_evaluation}
+
 tar_load(onde_coverage)
 tar_load(fish_coverage)
 tar_load(hydrobio_coverage)
@@ -379,5 +464,3 @@ tar_load(hydrobio_coverage)
 
 100*(hydrobio_coverage$deleted_segments[, .N] + hydrobio_coverage$nce_segments[, .N])/(hydrobio_coverage$attris_ddtnets[, .N])
 ```
-
-Although
