@@ -333,7 +333,9 @@ ggplot(drainage_density_summary$nets_stats_merged_bv[
 This nested variability is also visible spatially
 
 ```{r interdep_mod}
-
+#| label: tbl-stats-dep
+#| tbl-cap: ""
+#| 
 mods_envdd_interdep$env_dd_dep_cor %>%
   as.data.table %>%
   setnames('cor', "Spearman's rho") %>%
@@ -367,7 +369,8 @@ For each environmental variable, we then visualized the scatterplots for all rel
 #| fig-column: page-right
 #| out-width: 100%
 
-# tar_load(envdd_plot_correlations)
+#tar_load(envdd_plot_correlations)
+#envdd_plot_correlations[[1]]
 # envdd_plot_correlations[[1]]
 # envdd_plot_correlations[[2]]
 

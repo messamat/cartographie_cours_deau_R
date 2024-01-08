@@ -470,13 +470,13 @@ list(
   #          envdd_dep_plots$env_lengthratio_bdtopo,
   #          width = 180, height=180, units='mm', dpi=300
   #   )
-  # ),
-  # 
-  # tar_target(
-  #   output_plots5,
-  #   ggsave(paste0("env_ddratio_corheatmap_avg.png"),
-  #          envdd_multivar_analysis$env_ddratio_corheatmap_avg_morecl,
-  #          width = 250, height=300, units='mm', dpi=300
-  #   )
   # )
+  ,
+  tar_target(
+    output_plots5,
+    ggsave(paste0("env_ddratio_corheatmap_avg.png"),
+           envdd_multivar_analysis$env_ddratio_corheatmap_avg_morecl,
+           width = 250, height=300, units='mm', dpi=300
+    )
+  )
 )
