@@ -20,11 +20,19 @@ library(targets)
 tar_load(metadata_nets_formatted)
 tar_load(ddtnets_bvinters)
 tar_load(ddt_nets_colnas)
+tar_load(ddtnets_bvinters_stats)
 tar_load(envdd_dep_plots)
 tar_load(missing_ddtdata_bvs)
 tar_load(expertise_effort)
 tar_load(vulnerable_waters_analysis)
 tar_load(mods_envdd_interdep)
+tar_load(envdd_multivar_analysis)
+tar_load(drainage_density_summary)
+tar_load(vulnerable_waters_analysis)
+tar_load(mods_envdd)
+tar_load(onde_coverage)
+tar_load(fish_coverage)
+tar_load(hydrobio_coverage)
 
 knit_print.integer = function(x, ...) {
   prettyNum(x, big.mark=",")
@@ -67,6 +75,148 @@ attrimatches_pairwise_avg  <- as.data.table(
   .[, sum(attri_name_1==attri_name_2, na.rm=T), 
     by=c('dep_code_1', 'dep_code_2')] %>%
   .[, mean(V1)]
+```
+
+## Overall summary at the departmental level
+
+summary_table_raw
+
+```{r department_summary_table}
+#| label: tbl-summary-dep 
+#| tbl-cap: "" 
+
+#Number of lines, whether NCEs are included and origin of data
+meta_summary <- metadata_nets_formatted[, list(
+  nlines_reported = sum(nlines_reported),
+  nce_included = any(nce_included %in% 
+                       c("O", "O (non-explicite)","O (dans autre couche)")),
+  nce_included_cat = !("Pas de catégorie correspondante" %in% nce_recat),
+  data_orig = data_orig), by=c('dep_code', 'dep_name')] %>%
+  setnames('dep_code', 'INSEE_DEP')
+
+#Mapped percentage with flow permanence status
+#per_determined_raw <- ddtnets_bvinters_stats$per_raw_determined_dep
+
+#Check if at least 1% of nce to determine whether they were included
+deps_wnce_summary <- drainage_density_summary$nets_stats_melt_dep[
+  !duplicated(INSEE_DEP),
+  list(nce_o1perc = per_nce > 0.01), by=INSEE_DEP]
+
+#% of area covered by cartography
+per_missing_area_bydep <- missing_ddtdata_bvs$nodata_per_area_bydep %>%
+  setDT %>%
+  setnames('INSEE_DEP.x', 'INSEE_DEP')
+
+#Vulnerable water statistics
+vulnwat_summary <- vulnerable_waters_analysis$dep_analysis %>%
+  .[, per_hdw := .SD[strahler=='1', per_length_order], by=INSEE_DEP] %>% 
+  .[, per_determined := length_determined/length_order] %>%
+  rbind(vulnerable_waters_analysis$dep_analysis_nonce, fill=T) %>%
+  .[strahler=='total', -c('strahler'), with=F] %>%
+  setnames(c('per_nce'), c('per_nce_interp'))
+
+#Do not compute for those without NCE data because a lot of first order streams may no be included (so assigning 1st order to 2nd or 3rd order streams)
+
+#drainage density ratio
+ddr_summary <- drainage_density_summary$nets_stats_melt_dep[
+  variable=='bdtopo', 
+  .(INSEE_DEP,  length_ddtnets_total, per_ce, per_ind, per_nce,
+    lengthratio_ddt_ceind_to_other)]
+
+#cluster group
+gclass_summary <- envdd_multivar_analysis$env_dd_dep_cor_avg_morecl[
+  !duplicated(INSEE_DEP),
+  .(n_bvs, gclass), by=INSEE_DEP]
+
+
+summary_table_raw <- Reduce(
+  function(x, y) merge(x, y, by='INSEE_DEP', all.x=T, all.y=T),
+  list(meta_summary, deps_wnce_summary,
+       per_missing_area_bydep, vulnwat_summary,
+       ddr_summary, gclass_summary)
+) %>%
+  .[, nce_o1perc := (
+    per_nce>0.01|(per_nce>0 & per_nce_interp<0.01 & stats_source == 'bdtopo') |
+      (per_nce>0 & lengthratio_ddt_ceind_to_other>=1))] %>%
+  .[, c(
+    "INSEE_DEP","dep_name", 'gclass', 'data_orig', 'n_bvs',"nlines_reported", "length_ddtnets_total",'nce_included', 'nce_included_cat', 'nce_o1perc', 'per_missing_area', "lengthratio_ddt_ceind_to_other", 'per_ce', 'per_ind', 'per_nce','stats_source', 'length_order','per_determined', 'per_nce_interp', 'per_ires', "per_hdw", "per_hdworires", "ires_nce_representativeness", "per_nce_hdworires","representativeness_hdworires_in_nce"
+  ),
+  with=F] 
+
+#format mode of access
+summary_table_raw[,
+                  data_orig := fcase(
+                    data_orig %in% c('GEOIDE', 'Autre site'), 'Online',
+                    data_orig %in% c("Données procurées à Hervé Pella par DDT",
+                                     "DDT"), 'Request',
+                    data_orig == 'Autre site;DDT', 'Online & request'
+                  )]
+unique(summary_table_raw$data_orig)
+
+#format reference of analysis
+
+#------------------ Format table -----------------------------
+new_cols_sel <- c(
+  'Name',
+  'Number',
+  'Group',
+  'Mode of access',
+  'Sub-basins',
+  'Mapped segments',
+  'Total mapped length (103 km)',
+  'Includes n-w (meta)',
+  'Includes n-w (col)',
+  'Includes n-w (over 1%)',
+  'Area left to map (%)',
+  'Drainage density ratio (mapped)',
+  '% watercourses (mapped)',
+  '% uncategorized (mapped)',
+  '% n-w (mapped)',
+  'Reference of analysis',
+  'Total inferred length (103 km)',
+  '% with flow permanence status',
+  '% n-w (inferred)',
+  '% total non-perennial (inferred)',
+  '% first-order (inferred)',
+  '% vulnerable (inferred)',
+  'Non-perennial represent. (inferred)',
+  '% vulnerable n-w (inferred)',
+  'Vulnerable represent. (inferred)'
+)
+
+setnames(summary_table_raw, new_cols_sel) 
+set_flextable_defaults(font.family = "Calibri")
+ 
+thousands_format <- function(x) format(round(x/1000, 0), big.mark = ",")
+pct_format <- function(x) paste0(format(round(100*x)), '%')
+
+summary_table_raw[!(Name %in% c(75, 92, 93, 94)),] %>%
+  flextable %>%
+  colformat_num(big.mark = ",") %>%
+  set_formatter(
+    `Total mapped length (103 km)` = thousands_format,
+    `Area left to map (%)` = pct_format,
+    `Drainage density ratio (mapped)`= function(x) round(x,2),
+    `% watercourses (mapped)` = pct_format,
+    `% uncategorized (mapped)` = pct_format,
+    `% n-w (mapped)` = pct_format,
+    `Total inferred length (103 km)` = thousands_format,
+    `% with flow permanence status` = pct_format,
+    `% n-w (inferred)` = pct_format,
+    `% total non-perennial (inferred)` = pct_format,
+    `Non-perennial represent. (inferred)` = function(x) round(x,2),
+    `% first-order (inferred)` = pct_format,
+    `% vulnerable (inferred)` = pct_format,
+    `% vulnerable n-w (inferred)` = pct_format,
+    `Vulnerable represent. (inferred)` = function(x) round(x,2)
+  ) %>%
+  theme_vanilla %>%
+  border_inner_h(fp_border_default(width = 0))
+
+#------------------------- Print table -----------------------------------------
+
+
+
 ```
 
 ## General stats
@@ -230,10 +380,7 @@ The amount of field expertise required to follow the guidelines provided by the 
 # Drainage density
 
 ```{r drainage_density_summary}
-
-tar_load(drainage_density_summary)
 dep_stats <- drainage_density_summary$nets_stats_melt_dep
-tar_load(vulnerable_waters_analysis)
 
 #---------------------- compute general stats - to be integrated in report ----
 #Total length, variability in drainage density at the level of departments
@@ -359,7 +506,6 @@ To explore why different sub-basins within a same department differed in their l
 #| fig-column: page-right
 #| out-width: 100%
 
-tar_load(envdd_multivar_analysis)
 envdd_multivar_analysis$env_ddratio_corheatmap_avg8cl
 ```
 
@@ -377,8 +523,6 @@ For each environmental variable, we then visualized the scatterplots for all rel
 ```
 
 ```{r tabulate_env_dd_mods}
-
-tar_load(mods_envdd)
 
 mod_eqs <- lapply(mods_envdd, function(cl) {
   equatiomatic::extract_eq(cl[[1]])
@@ -456,10 +600,6 @@ flextable(out_tab[order(`Strahler order`), new_cols_sel, with=F]) %>%
 ## Coverage of cartography
 
 ```{r coverage_evaluation}
-
-tar_load(onde_coverage)
-tar_load(fish_coverage)
-tar_load(hydrobio_coverage)
 
 100*(onde_coverage$deleted_segments[, .N] + onde_coverage$nce_segments[, .N])/(onde_coverage$attris_ddtnets[, .N])
 
