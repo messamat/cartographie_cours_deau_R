@@ -10,6 +10,9 @@ tar_option_set(format = "qs")
 #--- Data repositories --------------------------------------------------------
 statsgdb = file.path(resdir, 'env_stats.gdb')
 
+#--- Parameters ---------------------------------------------------------------
+excluded_deps = c(75, 92, 93, 94)
+
 ############################# Define targets plan ##############################
 list(
   #------------------------------- Read files ----------------------------------
@@ -24,9 +27,9 @@ list(
   tar_target(ddtnets_path, file.path(resdir, 'analysis_outputs.gdb', 'carto_loi_eau_fr')),
   #Path to departments
   tar_target(deps_shp_path, file.path(datdir, 'données_auxiliaires', 'admin_express',
-                                  'ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16',
-                                  'ADMIN-EXPRESS', '1_DONNEES_LIVRAISON_2023-10-16',
-                                  'ADE_3-2_SHP_LAMB93_FXX', 'DEPARTEMENT.shp'),
+                                      'ADMIN-EXPRESS_3-2__SHP_LAMB93_FXX_2023-10-16',
+                                      'ADMIN-EXPRESS', '1_DONNEES_LIVRAISON_2023-10-16',
+                                      'ADE_3-2_SHP_LAMB93_FXX', 'DEPARTEMENT.shp'),
              format='file'),
   
   #Establish file paths (to be reactive to file updates)
@@ -44,13 +47,14 @@ list(
   tar_target(carthage_bvinters_path, file.path(resdir, "TRONCON_HYDROGRAPHIQUE_bvinters.csv"  ),format = 'file'), #Carthage
   tar_target(ddtnets_bvinters_path, file.path(resdir, "carto_loi_eau_fr_bvinters.csv"), format = 'file'), #DDT harmonized networks
   
-  tar_target(ddtnets_strahler_path, file.path(resdir, "carto_loi_eau_noartif_strahler_fr.csv"), format = 'file'),
   tar_target(bdtopo_strahler_path, file.path(resdir, "bdtopo_noartif_strahler_fr.csv"), format = 'file'),
-  
+  tar_target(ddtnets_strahler_path, file.path(resdir, "carto_loi_eau_noartif_strahler_fr.csv"), format = 'file'),
+
   tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
   tar_target(bdforet_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
   tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
   tar_target(comirrig_bvinters_path, file.path(resdir, "com_irrig_bvinters.csv"),format = 'file'), #commune-based irrigation
+  tar_target(artifbasins_bvinters_path, file.path(resdir, 'artificial_basins_fr_bvinters.csv'), format='file'),
   tar_target(bdcharm_bvinters_path, file.path(resdir, "GEO050K_HARM_merge_bvinters.csv"),format = 'file'), #lithology
   tar_target(snelder_bvinters_path, file.path(resdir, "snelder_ires_bvinters.csv"),format = 'file'),
   tar_target(bnpe_bvinters_path, file.path(resdir, "withdrawals_bnpe_proj_bvinters.csv"),format = 'file'), #withdrawals
@@ -99,11 +103,12 @@ list(
   tar_target(bdtopo_bvinters, fread(bdtopo_bvinters_path)), #BDTOPO
   tar_target(rht_bvinters, fread(rht_bvinters_path)), #RHT
   tar_target(carthage_bvinters, fread(carthage_bvinters_path)), #Carthage
-  tar_target(ddtnets_bvinters, fread(ddtnets_bvinters_path)), #DDT harmonized networks
+  tar_target(ddtnets_bvinters, fread(ddtnets_bvinters_path)[
+    !(INSEE_DEP %in% excluded_deps),]), #DDT harmonized networks
   
   #Read in csv of strahler order of ddt nets and networks
-  tar_target(ddtnets_strahler, fread(ddtnets_strahler_path, 
-                                     select=c("UID_CE", "strahler"))), 
+  tar_target(ddtnets_strahler, fread(ddtnets_strahler_path,
+                                     select=c("UID_CE", "strahler"))),
   tar_target(bdtopo_strahler, fread(bdtopo_strahler_path,
                                     select=c("ID", "strahler"))),
   
@@ -112,6 +117,7 @@ list(
   tar_target(bdforet_bvinters, fread(bdforet_bvinters_path)), #forest type
   tar_target(bdhaies_bvinters, fread(bdhaies_bvinters_path)), #hedges
   tar_target(comirrig_bvinters, fread(comirrig_bvinters_path)), #commune-based irrigation
+  tar_target(artifbasins_bvinters, fread(artifbasins_bvinters_path)), #artificial basins
   tar_target(bdcharm_bvinters, fread(bdcharm_bvinters_path)), #lithology
   tar_target(snelder_bvinters, fread(snelder_bvinters_path)),
   tar_target(bnpe_bvinters, fread(bnpe_bvinters_path)), #withdrawals
@@ -126,7 +132,7 @@ list(
   tar_target(fish_ddtnets_spjoin, fread(fish_ddtnets_spjoin_path, encoding='Latin-1')),
   ##### HAVE TO REMOVE DOUBLE QUOTES FROM THIS FILE BELOW FOR IT TO BE READ######
   tar_target(fish_pop_bvinters, fread(fish_pop_bvinters_path, encoding='Latin-1')), #stations of intermittency observation
-
+  
   
   tar_target(hydrobio_ddtnets_spjoin, fread(hydrobio_ddtnets_spjoin_path)), 
   ##### HAVE TO REMOVE DOUBLE QUOTES FROM THIS FILE BELOW FOR IT TO BE READ######
@@ -169,6 +175,10 @@ list(
     format_irrig(comirrig_bvinters)
   ),
   tar_target(
+    artifbasins_formatted,
+    format_artifbasins(in_artifbasins_bvinters=artifbasins_bvinters)
+  ),
+  tar_target(
     lithology_formatted,
     format_bdcharm(bdcharm_bvinters)
   ),
@@ -192,6 +202,7 @@ list(
                       , ires_formatted=ires_formatted
                       , withdrawals_formatted=withdrawals_formatted
                       , irrig_formatted=irrig_formatted
+                      , artifbasins_formatted=artifbasins_formatted
                     ))
   ),
   
@@ -209,7 +220,7 @@ list(
                           in_ddtnets_bdtopo_polyinters = ddtnets_bdtopo_polyinters,
                           in_ddtnets_carthage_polyinters = ddtnets_carthage_polyinters)
     
-
+    
   ),
   
   tar_target(
@@ -217,7 +228,9 @@ list(
     format_ddtnets_bvinters(in_ddtnets_bvinters = ddtnets_bvinters,
                             in_bdtopo_bvinters = bdtopo_bvinters,
                             in_carthage_bvinters = carthage_bvinters,
-                            in_ddtnets_refids_imputed = ddtnets_refids_imputed)
+                            in_ddtnets_refids_imputed = ddtnets_refids_imputed,
+                            excluded_deps=excluded_deps)
+    
   ),
   
   tar_target(
@@ -305,7 +318,7 @@ list(
     evaluate_missing_areas(in_ddtnets_stats = ddtnets_bvinters_stats$bv_stats,
                            in_drainage_density_summary <- drainage_density_summary,
                            in_bvdep_inters = bvdep_inters_tab
-                           )
+    )
   ),
   
   tar_target(
@@ -313,7 +326,7 @@ list(
     export_missing_bvs(in_drainage_density_summary = drainage_density_summary,
                        in_bvdep_inters_gdb_path = bvdep_inters_gdb_path,
                        out_shapefile = file.path(resdir, 'carto_loi_eau_missing_data_bvs.shp')
-                       ),
+    ),
     format='file'
   ),
   
@@ -326,7 +339,7 @@ list(
   tar_target(
     env_dd_merged_dep,
     merge_env_dd_dep(in_drainage_density_summary=drainage_density_summary,
-                      in_env_bv_dt=env_bv_dt)
+                     in_env_bv_dt=env_bv_dt)
   ),
   
   tar_target(
@@ -404,6 +417,15 @@ list(
   ,
   
   tar_target(
+    output_plots5,
+    ggsave(paste0("env_ddratio_corheatmap_avg.png"),
+           envdd_multivar_analysis$env_ddratio_corheatmap_avg_morecl,
+           width = 250, height=300, units='mm', dpi=600
+    )
+  )
+  ,
+  
+  tar_target(
     vulnerable_waters_analysis,
     analyze_vulnerable_waters(
       in_drainage_density_summary = drainage_density_summary,
@@ -471,12 +493,4 @@ list(
   #          width = 180, height=180, units='mm', dpi=300
   #   )
   # )
-  ,
-  tar_target(
-    output_plots5,
-    ggsave(paste0("env_ddratio_corheatmap_avg.png"),
-           envdd_multivar_analysis$env_ddratio_corheatmap_avg_morecl,
-           width = 250, height=300, units='mm', dpi=300
-    )
-  )
 )
