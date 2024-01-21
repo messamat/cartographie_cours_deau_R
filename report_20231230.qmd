@@ -29,10 +29,12 @@ tar_load(mods_envdd_interdep)
 tar_load(envdd_multivar_analysis)
 tar_load(drainage_density_summary)
 tar_load(vulnerable_waters_analysis)
-tar_load(mods_envdd)
+tar_load(mods_envdd_intradep)
 tar_load(onde_coverage)
 tar_load(fish_coverage)
 tar_load(hydrobio_coverage)
+
+excluded_deps = c(75, 92, 93, 94)
 
 knit_print.integer = function(x, ...) {
   prettyNum(x, big.mark=",")
@@ -97,10 +99,8 @@ meta_summary <- metadata_nets_formatted[, list(
 #Mapped percentage with flow permanence status
 #per_determined_raw <- ddtnets_bvinters_stats$per_raw_determined_dep
 
-#Check if at least 1% of nce to determine whether they were included
-deps_wnce_summary <- drainage_density_summary$nets_stats_melt_dep[
-  !duplicated(INSEE_DEP),
-  list(nce_o1perc = per_nce > 0.01), by=INSEE_DEP]
+#Get departments that fully included departments
+deps_wnce_summary <- vulnerable_waters_analysis$deps_wnce
 
 #% of area covered by cartography
 per_missing_area_bydep <- missing_ddtdata_bvs$nodata_per_area_bydep %>%
@@ -131,15 +131,12 @@ gclass_summary <- envdd_multivar_analysis$env_dd_dep_cor_avg_morecl[
 
 summary_table_raw <- Reduce(
   function(x, y) merge(x, y, by='INSEE_DEP', all.x=T, all.y=T),
-  list(meta_summary, deps_wnce_summary,
-       per_missing_area_bydep, vulnwat_summary,
+  list(meta_summary,per_missing_area_bydep, vulnwat_summary,
        ddr_summary, gclass_summary)
 ) %>%
-  .[, nce_o1perc := (
-    per_nce>0.01|(per_nce>0 & per_nce_interp<0.01 & stats_source == 'bdtopo') |
-      (per_nce>0 & lengthratio_ddt_ceind_to_other>=1))] %>%
+  .[, nce_mostincluded := (INSEE_DEP %in% deps_wnce_summary)] %>%
   .[, c(
-    "INSEE_DEP","dep_name", 'gclass', 'data_orig', 'n_bvs',"nlines_reported", "length_ddtnets_total",'nce_included', 'nce_included_cat', 'nce_o1perc', 'per_missing_area', "lengthratio_ddt_ceind_to_other", 'per_ce', 'per_ind', 'per_nce','stats_source', 'length_order','per_determined', 'per_nce_interp', 'per_ires', "per_hdw", "per_hdworires", "ires_nce_representativeness", "per_nce_hdworires","representativeness_hdworires_in_nce"
+    "INSEE_DEP","dep_name", 'gclass', 'data_orig', 'n_bvs',"nlines_reported", "length_ddtnets_total",'nce_included', 'nce_included_cat', 'nce_mostincluded', 'per_missing_area', 'per_bdtopoID', "lengthratio_ddt_ceind_to_other", 'per_ce', 'per_ind', 'per_nce','stats_source', 'length_order','per_determined', 'per_nce_interp', 'per_ires', "per_hdw", "per_hdworires", "ires_nce_representativeness", "per_nce_hdworires","representativeness_hdworires_in_nce"
   ),
   with=F] 
 
@@ -166,8 +163,9 @@ new_cols_sel <- c(
   'Total mapped length (103 km)',
   'Includes n-w (meta)',
   'Includes n-w (col)',
-  'Includes n-w (over 1%)',
+  'Includes n-w (most)',
   'Area left to map (%)',
+  'Matched to BD-TOPO (%)',
   'Drainage density ratio (mapped)',
   '% watercourses (mapped)',
   '% uncategorized (mapped)',
@@ -196,6 +194,7 @@ summary_table_raw[!(Name %in% c(75, 92, 93, 94)),] %>%
   set_formatter(
     `Total mapped length (103 km)` = thousands_format,
     `Area left to map (%)` = pct_format,
+    `Matched to BD-TOPO (%)` = pct_format,
     `Drainage density ratio (mapped)`= function(x) round(x,2),
     `% watercourses (mapped)` = pct_format,
     `% uncategorized (mapped)` = pct_format,
@@ -380,7 +379,7 @@ The amount of field expertise required to follow the guidelines provided by the 
 # Drainage density
 
 ```{r drainage_density_summary}
-dep_stats <- drainage_density_summary$nets_stats_melt_dep
+dep_stats <- drainage_density_summary$nets_stats_melt_dep[!(INSEE_DEP %in% excluded_deps),]
 
 #---------------------- compute general stats - to be integrated in report ----
 #Total length, variability in drainage density at the level of departments
@@ -409,7 +408,7 @@ The hydrographic dataset underlying watercourse mapping inherently influences th
 
 `r knitr::kable(total_length_fr)`
 
-Considering that watercourse mapping was supposed to be based on the BD TOPO, we evaluated the consistency of watercourse maps from DDTs by comparing them to this reference dataset. Specifically, we quantified the difference in drainage density between the watercourse maps and BD TOPO expressed as the ratio in drainage density. For example, if a DDT map identified 7,000 km of watercourses whereas BD TOPO included 10,000 km of river segments in that same department, the ratio in drainage density would be 0.7. We focused on this drainage density ratio because 29 (31%) out of 94 departments did not provide data on line segments that were classified as non-watercourses (i.e., segments that were present in the hydrographic basis but that were considered not to qualify as watercourses).
+Considering that watercourse mapping was supposed to be based on the BD TOPO, we evaluated the consistency of watercourse maps from DDTs by comparing them to this reference dataset. Specifically, we quantified the difference in drainage density between the watercourse maps and BD TOPO expressed as the ratio in drainage density. For example, if a DDT map identified 7,000 km of watercourses whereas BD TOPO included 10,000 km of river segments in that same department, the ratio in drainage density would be 0.7. We focused on this drainage density ratio because `r (90-length(vulnerable_waters_analysis$deps_wnce))` out of the 90 departments we analyzed did not provide data on line segments that were classified as non-watercourses (i.e., segments that were present in the hydrographic basis but that were considered not to qualify as watercourses).
 
 Computing a drainage density ratio also controlled for differences in absolute drainage density due to climate, topography, lithology and other major natural drivers across France. This ratio thus enabled us to focus on *deviations* beyond these determinants of drainage density.
 
@@ -430,7 +429,7 @@ To investigate the potential drivers of variations in drainage density ratio wit
 
 ### Variability in drainage density ratio
 
-The average drainage density ratio varied considerably between departments across France, both in terms of mean (drainage density ratio at the departmental level: mean± SD = `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), mean(lengthratio_ddt_ceind_to_other)]` ± `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), sd(lengthratio_ddt_ceind_to_other)]`) and range (within-department range in drainage density ratio: mean ± SD = `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), mean(V1)]`± `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), sd(V1)]`), whether BDTOPO and RHT was used for comparison (Figure 2, Figure S1, Table SX). `r dep_stats[variable=='bdtopo' & lengthratio_ddt_ceind_to_other>1.10, .N]`departments were particularly inclusive so that the department-wide drainage density exceeded that of BDTOPO by more than 10%, whereas `r dep_stats[variable=='bdtopo' & lengthratio_ddt_ceind_to_other< 0.5, .N]` departments categorized less than half of the network length shown in BDTOPO as watercourses.
+The average drainage density ratio varied considerably between departments across France, both in terms of mean (drainage density ratio at the departmental level: mean± SD = `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), mean(lengthratio_ddt_ceind_to_other)]` ± `r dep_stats[variable=='bdtopo' & (!(INSEE_DEP %in% c(75,92,93,94))), sd(lengthratio_ddt_ceind_to_other)]`) and range (within-department range in drainage density ratio: mean ± SD = `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), mean(V1)]`± `r dd_range_dep[!(INSEE_DEP %in% c(75,92,93,94)), sd(V1)]`), whether BDTOPO and RHT was used for comparison (Figure 2, Figure S1, Table SX). `r dep_stats[variable=='bdtopo' & lengthratio_ddt_ceind_to_other>1, .N]`departments were particularly inclusive so that the department-wide drainage density exceeded that of BDTOPO by more than 10%, whereas `r dep_stats[variable=='bdtopo' & lengthratio_ddt_ceind_to_other< 0.5, .N]` departments categorized less than half of the network length shown in BDTOPO as watercourses.
 
 ```{r dd_dep_plots_bars}
 #| fig-column: page-right
@@ -515,16 +514,21 @@ For each environmental variable, we then visualized the scatterplots for all rel
 #| fig-column: page-right
 #| out-width: 100%
 
-#tar_load(envdd_plot_correlations)
-#envdd_plot_correlations[[1]]
-# envdd_plot_correlations[[1]]
-# envdd_plot_correlations[[2]]
+envdd_multivar_analysis$env_dd_dep_cor_avg_morecl[!duplicated(INSEE_DEP),
+                                                  list(class_bvs = sum(n_bvs),
+                                                       n_deps = .N), by=gclass][order(gclass),]
+
+mod_summaries <- lapply(mods_envdd_intradep, function(cl) {
+  list(summary(cl[[1]]),
+       paste("MAE model: ", cl[[2]]$MAE),
+       paste("MAE NULL: ", cl[[4]]$MAE))
+})
 
 ```
 
 ```{r tabulate_env_dd_mods}
 
-mod_eqs <- lapply(mods_envdd, function(cl) {
+mod_eqs <- lapply(mods_envdd_intradep, function(cl) {
   equatiomatic::extract_eq(cl[[1]])
 })
 
@@ -535,28 +539,22 @@ eqs_kable <- knitr::kable(mod_eqs)
 
 ## Representativeness of vulnerable waters
 
-'Non-perennial length (km)', '% non-watercourse',
-
-'% non-perennial',
-
-'% non-watercourse and non-perennial',
-
-'% length with flow permanence status',
-
-'Strahler order representativeness',
-
-'Non-perennial representativeness'
-
 ```{r vulnerable waters analysis}
 #| label: tbl-stats
 #| tbl-cap: ""
+
+tar_load(ddtnets_strahler)
+ddtnets_strahler[, .SD[!is.na(strahler),.N]/.N]
+
+tar_load(bdtopo_strahler)
+bdtopo_strahler[, .SD[!is.na(strahler),.N]/.N]
 
 out_tab <- vulnerable_waters_analysis$fr_analysis %>%
   as.data.table 
 
 out_tab[is.na(strahler), strahler := 'Undetermined']
 out_tab[, strahler := factor(str_to_title(strahler),
-                             levels=c('1', '2', '3', '4', 'Undetermined', 'Total'))]
+                             levels=c('1', '2', '3', '4', '5', 'Undetermined', 'Total'))]
 
 
 
@@ -569,7 +567,7 @@ new_cols_sel <- c('Strahler order',
                   'Non-perennial length (103 km)', 
                   '% non-watercourse', 
                   '% non-perennial', 
-                  '% non-watercourse and non-perennial',
+                  '% non-watercourses that are non-perennial',
                   '% length with flow permanence status',
                   'Strahler order representativeness in non-watercourses', 
                   'Non-perennial representativeness in non-watercourses')
@@ -595,7 +593,23 @@ flextable(out_tab[order(`Strahler order`), new_cols_sel, with=F]) %>%
   ) %>%
   theme_vanilla %>%
   border_inner_h(fp_border_default(width = 0))
+
+#Stats for text
+total_ires_per <- round(100*out_tab[`Strahler order`=='Total', `% non-perennial`])
+total_nce_ires_per <- 10*round(10*out_tab[`Strahler order`=='Total', `% non-watercourses that are non-perennial`])
+per_hdw <- round(100*out_tab[`Strahler order`=='1', `Length (103 km)`]/out_tab[`Strahler order`=='Total', `Length (103 km)`])
+nce_hdw_per <- round(100*out_tab[`Strahler order`=='1', `Non-watercourse length (103 km)`]/out_tab[`Strahler order`=='Total', `Non-watercourse length (103 km)`])
+
+per_vulnerable <- (out_tab[`Strahler order`=='1', `Length (103 km)`] + 
+  out_tab[`Strahler order` %in% c('2','3','4','5','Undetermined'), sum(`Non-perennial length (103 km)`)])/out_tab[`Strahler order`=='Total', `Length (103 km)`]
+
 ```
+
+We estimate that `r round(100*vulnerable_waters_analysis$fr_analysis[strahler=='total',per_nce])` % of previously mapped hydrographic segments, by length, were disqualified as non-watercourses (based on an assessment spanning `r round(100*vulnerable_waters_analysis$per_area_fr_processed)`% of the country's area.
+
+We analyzed `r length(vulnerable_waters_analysis$deps_processed)` departments.
+
+We estimate that non-perennial reaches comprise `r total_ires_per`% of the mapped hydrographic network length but make up about `r total_nce_ires_per`% of hydrographic segments which have been disqualified as non-watercourse (**Table 1**). Similarly, while headwaters contain at least `r per_hdw`% of the national hydrographic network length in the form of first-order reaches, `r nce_hdw_per`% of disqualified segments in watercourse maps are first-order reaches. Taken together, non-perennial and first-order reaches are overrepresented in non-watercourses by `r round(100*(vulnerable_waters_analysis$representativeness_vulnerable_nce_fr-1))`% compared to their prevalence in the overall hydrographic network.
 
 ## Coverage of cartography
 

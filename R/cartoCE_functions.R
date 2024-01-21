@@ -2435,7 +2435,7 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
        facet_wrap(~variable))
   
   #Chosen model, diagnostics, null model
-  cl1_chosen_model <- list(cl1_mod3_diagnostics$lagm, cl1_mod3_diagnostics, 
+  cl1_chosen_model <- list(cl1_mod3, cl1_mod3_diagnostics, 
                            cl1_mod0, cl1_mod0_diagnostics)
   
   #Agricultural area is more strongly correlated to drainage density ratio
@@ -2448,7 +2448,7 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   #in those areas. Probably considered mountain gullies.
   
   
-  #Class 2 - Bouches-du-Rhone -----------------------------------------------------
+  #Class 2 model- Bouches-du-Rhone -----------------------------------------------------
   print('Selecting model for class 2')
   
   dat_for_mod_cl2 <- get_dat_formod(
@@ -2558,7 +2558,7 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
   
   
   #Chosen model, diagnostics, null model
-  cl2_chosen_model <- list(cl2_mod4_diagnostics$lagm, cl2_mod4_diagnostics, 
+  cl2_chosen_model <- list(cl2_mod4, cl2_mod4_diagnostics, 
                            cl2_mod0, cl2_mod0_diagnostics)
   
   #AWC increase adjusted r2, but residuals become really whacky. not for
@@ -2876,14 +2876,14 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
                  weights=dat_for_mod_cl5$dat_cast$bv_area)
   summary(cl5_mod6)
   
-  cl5_mod6_diagnostics <- postprocess_model(in_mod = cl5_mod6,
-                                            in_dat_for_mod = dat_for_mod_cl5)
-  cl5_mod6_diagnostics$smr
-  plot(cl5_mod6_diagnostics$nsp_diag)
-  plot(cl5_mod6_diagnostics$resid_env_p)
-  cl5_mod6_diagnostics$resids_sp_p + 
-    scale_fill_distiller(palette="Spectral",
-                         limits=c(-0.4, 0.4))
+  # cl5_mod6_diagnostics <- postprocess_model(in_mod = cl5_mod6,
+  #                                           in_dat_for_mod = dat_for_mod_cl5)
+  # cl5_mod6_diagnostics$smr
+  # plot(cl5_mod6_diagnostics$nsp_diag)
+  # plot(cl5_mod6_diagnostics$resid_env_p)
+  # cl5_mod6_diagnostics$resids_sp_p + 
+  #   scale_fill_distiller(palette="Spectral",
+  #                        limits=c(-0.4, 0.4))
 
   
   #Model 7: dd ratio ~ wintercrop + dep + predicted percentage intermittency*dep +
@@ -2894,11 +2894,11 @@ build_mods_envdd_intradep <- function(in_envdd_multivar_analysis,
                  data=dat_for_mod_cl5$dat_cast,
                  weights=dat_for_mod_cl5$dat_cast$bv_area)
   
-  cl5_mod7_diagnostics <- postprocess_model(in_mod = cl5_mod7,
-                                            in_dat_for_mod = dat_for_mod_cl5)
-  cl5_mod7_diagnostics$smr
-  plot(cl5_mod7_diagnostics$nsp_diag)
-  plot(cl5_mod7_diagnostics$resid_env_p)
+  # cl5_mod7_diagnostics <- postprocess_model(in_mod = cl5_mod7,
+  #                                           in_dat_for_mod = dat_for_mod_cl5)
+  # cl5_mod7_diagnostics$smr
+  # plot(cl5_mod7_diagnostics$nsp_diag)
+  # plot(cl5_mod7_diagnostics$resid_env_p)
   #Too much becomes insignificant
   
   
@@ -3600,7 +3600,7 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
         #length of that order that is IRES
         length_ires = .SD[regime_formatted=='intermittent',
                           sum(geom_Length)],
-        #length of that order that is IRES
+        #length of that order that is NCE & IRES
         length_nce_ires = .SD[(regime_formatted=='intermittent') &
                                 (type_stand == "Non cours d'eau"),
                               sum(geom_Length)],
@@ -3613,10 +3613,11 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
         #% of length with regime and that order that is IRES
         per_ires = (.SD[regime_formatted=='intermittent', sum(geom_Length)]
                     /.SD[regime_formatted!='undetermined', sum(geom_Length)]),
-        #% of length with regime and that order that is NCE and IRES
+        #% of  non-watercourse length with regime and that is IRES
         per_nce_ires = (.SD[regime_formatted=='intermittent' &
                               type_stand == "Non cours d'eau", sum(geom_Length)]
-                        /.SD[regime_formatted!='undetermined', sum(geom_Length)]),
+                        /.SD[regime_formatted!='undetermined' &
+                               type_stand == "Non cours d'eau", sum(geom_Length)]),
         
         #percentage length with BD TOPO ID
         per_bdtopoID = .SD[!is.na(ID_bdtopo_merge), sum(geom_Length)]/
@@ -3688,14 +3689,14 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
   #Percentage of NCE with a determined regime that are either IRES or headwaters
   nce_vulnerable_stats_dep[
     , per_nce_hdworires := ((.SD[strahler %in% c(1), sum(length_nce_determined)]
-        + .SD[strahler %in% c(2,3,4,NA), sum(length_nce_ires)])
+        + .SD[strahler %in% c(2,3,4,5,6,NA), sum(length_nce_ires)])
        /.SD[strahler=='total',length_nce_determined]),
   by=INSEE_DEP]
 
   #Percentage of total river network that is either IRES or headwaters
   nce_vulnerable_stats_dep[
     , per_hdworires := ((.SD[strahler %in% c(1), sum(length_order)] +
-          .SD[strahler %in% c(2,3,4,NA), sum(length_ires)])/
+          .SD[strahler %in% c(2,3,4,5,6,NA), sum(length_ires)])/
          .SD[strahler=='total', length_order]),
   by=INSEE_DEP]
 
@@ -3776,7 +3777,7 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
         #% of length with regime and that order that is NCE and IRES
         per_nce_ires = (.SD[REGIME=='Intermittent' & is.na(UID_CE),
                             sum(Shape_Length)]
-                        /.SD[!is.na(REGIME), sum(Shape_Length)])
+                        /.SD[!is.na(REGIME) & is.na(UID_CE), sum(Shape_Length)])
       ), by=strahler] %>%
       .[,`:=`(
         #Get percentage length with status
@@ -3839,7 +3840,7 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
                 (per_bdtopo_determined_dep > 0.90),
               length(unique(INSEE_DEP))]
   
-  #---- Check match between estimates based on bdtopo and ddt net --------------
+  #--- Check match between estimates based on bdtopo and ddt net --------------
   cols <- heat.colors(16, rev=T)
   cols[15] <- 'blue'
   cols[16] <- 'darkblue'
@@ -3927,7 +3928,7 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
           'length_determined', 'per_ires', 'per_length_order', 'stats_source'),
       with=F]
   
-  #Compute statistics at national level-----------------------------------------
+  #--- Compute statistics at national level-----------------------------------------
   nce_vulnerable_stats_fr <- nce_vulnerable_stats_dep_all[
     , sum_nce_ires_stats(.SD), by=strahler] %>%
     .[,`:=`(per_length_order=NULL, per_nce_length_order=NULL,
@@ -3959,14 +3960,14 @@ analyze_vulnerable_waters <- function(in_drainage_density_summary,
   #Percentage of NCE with a determined regime that are either IRES or headwaters
   fr_per_nce_hdworires <- nce_vulnerable_stats_fr[
     , ((.SD[strahler %in% c(1), sum(length_nce_determined)] 
-        + .SD[strahler %in% c(2, 3, 4,NA), sum(length_nce_ires)])
+        + .SD[strahler %in% c(2, 3, 4, 5, 6, NA), sum(length_nce_ires)])
        /.SD[strahler=='total',length_nce_determined])
   ]
   
   #Percentage of total river network that is either IRES or headwaters
   fr_per_hdworires <- nce_vulnerable_stats_fr[
     , ((.SD[strahler %in% c(1), sum(length_order)] + 
-          .SD[strahler %in% c(2,3,4,NA), sum(length_ires)])/
+          .SD[strahler %in% c(2,3,4,5,6,NA), sum(length_ires)])/
          .SD[strahler=='total', length_order])
   ]
   
