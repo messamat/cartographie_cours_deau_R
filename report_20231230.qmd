@@ -218,6 +218,84 @@ summary_table_raw[!(Name %in% c(75, 92, 93, 94)),] %>%
 
 ```
 
+### Histograms to accompany national maps of drainage density
+
+```{r department_summary_histogram}
+#| label: tbl-summary-dep 
+#| tbl-cap: "" 
+
+# setnames(summary_table_raw,
+#          c('% watercourses (mapped)', '% uncategorized (mapped)',
+#            '% n-w (mapped)', 'Drainage density ratio (mapped)'),
+#          c('ce', 'ind', 'nce', 'ddratio'))
+
+#Watercourses ----------------------------------------------------
+summary_table_raw$ce_interval <- cut(
+  summary_table_raw$ce,
+  breaks = c(0, 0.2, 0.4, 0.6, 0.8, 0.95, 1),
+  include.lowest = FALSE,
+  labels = c("0-0.20", "0.20-0.40", "0.40-0.60", 
+             "0.60-0.80", "0.80-0.95", "0.95-1.00"))
+
+ggplot(summary_table_raw[!(Name %in% c(75, 92, 93, 94)),], 
+       aes(x=ce, fill=ce_interval)) +
+geom_histogram(binwidth = 0.05, boundary = 0) +
+  scale_x_continuous(labels = scales::percent,
+                     breaks=c(0, 0.2, 0.4, 0.6, 0.8, 0.95, 1),
+                     expand=c(0,0)) +
+  scale_fill_manual(values = c("0-0.20" = '#ffffccff',
+                               "0.20-0.40" = '#c7e9b4ff',
+                               "0.40-0.60" = '#7fcdbbff',
+                               "0.60-0.80" = '#41b6c4ff',
+                               "0.80-0.95" = '#2c7fb8ff',
+                               "0.95-1.00" = '#253494ff'
+                               )) +
+  scale_y_continuous(name='# of departments',
+                     expand=c(0,0)) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        legend.position = 'none',
+        text = element_text(size=12),
+        plot.margin = margin(0, 0.5, 0, 0, "cm"))
+
+#Unclassified ------------------------------------------------
+summary_table_raw$ind_interval <- cut(
+  summary_table_raw$ind,
+  breaks = c(0, 0.001, seq(0.05,1,0.05)),
+  include.lowest = T
+)
+
+colscale_unclassified <- c('#fff7f3ff', rep('#fcd0ccff', 4), rep('#f994b1ff', 4),
+  rep('#e23e99ff', 4),rep('#99007bff', 4),rep('#49006aff', 4))
+names(colscale_unclassified) <- levels(summary_table_raw$ind_interval)
+
+colscale_unclassified_dt <- as.data.table(colscale_unclassified, 
+                                          keep.rownames = T) %>%
+  .[, order:= .I]
+
+summary_table_raw_indcount <- summary_table_raw[, .N, by=ind_interval] %>% 
+  merge(colscale_unclassified_dt, ., by.x='rn', by.y='ind_interval', all.x=T) %>%
+  .[is.na(N), N := 0] %>%
+  .[, ind_interval := factor(rn, levels=colscale_unclassified_dt$rn)]
+  
+ggplot(summary_table_raw_indcount, 
+       aes(x=ind_interval, y=N, fill=ind_interval)) +
+  geom_bar(stat='identity', witdh=1) +
+  scale_x_discrete(labels=c('0', rep('', 3), '0.20', rep('', 3), '0.40',
+                            rep('', 3), '0.60', rep('', 3), 0.80, rep('', 3), 1.00)) +
+  scale_fill_manual(values = colscale_unclassified) +
+  scale_y_continuous(name='# of departments',
+                     expand=c(0,0)) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(),
+        legend.position = 'none',
+        text = element_text(size=12),
+        plot.margin = margin(0, 0.5, 0, 0, "cm"),
+        axis.text.x = element_text(hjust=1))
+
+#Non-water courses
+```
+
 ## General stats
 
 There are `r length(unique(metadata_nets_formatted$local_url))` unique networks for mainland France, for a total of `r ddtnets_n_reported` individual watercourse segments. After removing invalid and duplicate geometries, there remain `r ddtnets_n` individual segments in the compiled dataset.

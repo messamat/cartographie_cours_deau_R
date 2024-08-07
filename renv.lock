@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.2.2",
+    "Version": "4.4.1",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -19,6 +19,50 @@
         "methods"
       ],
       "Hash": "b2866e62bab9378c3cc9476a1954226b"
+    },
+    "DT": {
+      "Package": "DT",
+      "Version": "0.33",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "crosstalk",
+        "htmltools",
+        "htmlwidgets",
+        "httpuv",
+        "jquerylib",
+        "jsonlite",
+        "magrittr",
+        "promises"
+      ],
+      "Hash": "64ff3427f559ce3f2597a4fe13255cb6"
+    },
+    "FactoMineR": {
+      "Package": "FactoMineR",
+      "Version": "2.11",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "DT",
+        "MASS",
+        "R",
+        "car",
+        "cluster",
+        "ellipse",
+        "emmeans",
+        "flashClust",
+        "ggplot2",
+        "ggrepel",
+        "grDevices",
+        "graphics",
+        "lattice",
+        "leaps",
+        "multcompView",
+        "scatterplot3d",
+        "stats",
+        "utils"
+      ],
+      "Hash": "54fc333adf872599b177a62d5759892a"
     },
     "KernSmooth": {
       "Package": "KernSmooth",
@@ -591,6 +635,19 @@
       ],
       "Hash": "e8a1e41acf02548751f45c718d55aa6a"
     },
+    "crosstalk": {
+      "Package": "crosstalk",
+      "Version": "1.2.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R6",
+        "htmltools",
+        "jsonlite",
+        "lazyeval"
+      ],
+      "Hash": "ab12c7b080a57475248a30f4db6298c0"
+    },
     "crul": {
       "Package": "crul",
       "Version": "1.4.0",
@@ -734,6 +791,18 @@
       ],
       "Hash": "1046cb48d06cb40c2900d8878f03a0fe"
     },
+    "ellipse": {
+      "Package": "ellipse",
+      "Version": "0.5.0",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "graphics",
+        "stats"
+      ],
+      "Hash": "4aa52573ccedf7dc635a0eb471944a36"
+    },
     "ellipsis": {
       "Package": "ellipsis",
       "Version": "0.3.2",
@@ -744,6 +813,23 @@
         "rlang"
       ],
       "Hash": "bb0eec2fe32e88d9e2836c2f73ea2077"
+    },
+    "emmeans": {
+      "Package": "emmeans",
+      "Version": "1.10.3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "estimability",
+        "graphics",
+        "methods",
+        "mvtnorm",
+        "numDeriv",
+        "stats",
+        "utils"
+      ],
+      "Hash": "276510e85e99a058fa4a0668e7ecca05"
     },
     "equatiomatic": {
       "Package": "equatiomatic",
@@ -767,6 +853,17 @@
       ],
       "Hash": "9d4f8ad265f3bb6ac228ab1f622398f1"
     },
+    "estimability": {
+      "Package": "estimability",
+      "Version": "1.5.1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "stats"
+      ],
+      "Hash": "21ec52af13afbcab1cb317567b639b0a"
+    },
     "evaluate": {
       "Package": "evaluate",
       "Version": "0.23",
@@ -777,6 +874,27 @@
         "methods"
       ],
       "Hash": "daf4a1246be12c1fa8c7705a0935c1a0"
+    },
+    "factoextra": {
+      "Package": "factoextra",
+      "Version": "1.0.7",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "FactoMineR",
+        "R",
+        "abind",
+        "cluster",
+        "dendextend",
+        "ggplot2",
+        "ggpubr",
+        "ggrepel",
+        "grid",
+        "reshape2",
+        "stats",
+        "tidyr"
+      ],
+      "Hash": "e95f1aed34b3f0a15a0c308175ee4c80"
     },
     "fansi": {
       "Package": "fansi",
@@ -803,6 +921,16 @@
       "Source": "Repository",
       "Repository": "CRAN",
       "Hash": "f7736a18de97dea803bde0a2daaafb27"
+    },
+    "flashClust": {
+      "Package": "flashClust",
+      "Version": "1.01-2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R"
+      ],
+      "Hash": "09fb526c49460c4933bc077db6eba924"
     },
     "flextable": {
       "Package": "flextable",
@@ -1010,7 +1138,7 @@
     },
     "ggplot2": {
       "Package": "ggplot2",
-      "Version": "3.4.4",
+      "Version": "3.5.1",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -1031,7 +1159,7 @@
         "vctrs",
         "withr"
       ],
-      "Hash": "313d31eff2274ecf4c1d3581db7241f9"
+      "Hash": "44c6a2f8202d5b7e878ea274b1092426"
     },
     "ggpubr": {
       "Package": "ggpubr",
@@ -1274,7 +1402,7 @@
     },
     "httpuv": {
       "Package": "httpuv",
-      "Version": "1.6.12",
+      "Version": "1.6.15",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -1285,7 +1413,7 @@
         "promises",
         "utils"
       ],
-      "Hash": "c992f75861325961c29a188b45e549f7"
+      "Hash": "d55aa087c47a63ead0f6fc10f8fa1ee0"
     },
     "igraph": {
       "Package": "igraph",
@@ -1402,6 +1530,23 @@
         "utils"
       ],
       "Hash": "7c5e89f04e72d6611c77451f6331a091"
+    },
+    "lazyeval": {
+      "Package": "lazyeval",
+      "Version": "0.2.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R"
+      ],
+      "Hash": "d908914ae53b04d4c0c0fd72ecc35370"
+    },
+    "leaps": {
+      "Package": "leaps",
+      "Version": "3.2",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "06ddb0b69b0714ae929b1b6029d6faf0"
     },
     "lifecycle": {
       "Package": "lifecycle",
@@ -1564,6 +1709,16 @@
         "survival"
       ],
       "Hash": "2688bf2f8d54c19534ee7d8a876d9fc7"
+    },
+    "multcompView": {
+      "Package": "multcompView",
+      "Version": "0.1-10",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "grid"
+      ],
+      "Hash": "bd174e328b679e9a1ce589422002c72b"
     },
     "munsell": {
       "Package": "munsell",
@@ -2028,13 +2183,13 @@
     },
     "renv": {
       "Package": "renv",
-      "Version": "1.0.3",
+      "Version": "1.0.7",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
         "utils"
       ],
-      "Hash": "41b847654f567341725473431dd0d5ab"
+      "Hash": "397b7b2a265bc5a7a06852524dabae20"
     },
     "reshape2": {
       "Package": "reshape2",
@@ -2048,22 +2203,6 @@
         "stringr"
       ],
       "Hash": "bb5996d0bd962d214a11140d77589917"
-    },
-    "rgdal": {
-      "Package": "rgdal",
-      "Version": "1.6-7",
-      "Source": "Repository",
-      "Repository": "CRAN",
-      "Requirements": [
-        "R",
-        "grDevices",
-        "graphics",
-        "methods",
-        "sp",
-        "stats",
-        "utils"
-      ],
-      "Hash": "10b777236c9e7855bc9dea8e347e30b7"
     },
     "rlang": {
       "Package": "rlang",
@@ -2190,25 +2329,40 @@
     },
     "scales": {
       "Package": "scales",
-      "Version": "1.2.1",
+      "Version": "1.3.0",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
         "R",
         "R6",
         "RColorBrewer",
+        "cli",
         "farver",
+        "glue",
         "labeling",
         "lifecycle",
         "munsell",
         "rlang",
         "viridisLite"
       ],
-      "Hash": "906cb23d2f1c5680b8ce439b44c6fa63"
+      "Hash": "c19df082ba346b0ffa6f833e92de34d1"
+    },
+    "scatterplot3d": {
+      "Package": "scatterplot3d",
+      "Version": "0.3-44",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R",
+        "grDevices",
+        "graphics",
+        "stats"
+      ],
+      "Hash": "10ee4b91ec812690bd55d9bf51edccee"
     },
     "sf": {
       "Package": "sf",
-      "Version": "1.0-14",
+      "Version": "1.0-16",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -2227,7 +2381,7 @@
         "units",
         "utils"
       ],
-      "Hash": "e2111252a76984ca50bf8d6314348681"
+      "Hash": "ad57b543f7c3fca05213ba78ff63df9b"
     },
     "shiny": {
       "Package": "shiny",
@@ -2292,18 +2446,18 @@
     },
     "spData": {
       "Package": "spData",
-      "Version": "2.3.0",
+      "Version": "2.3.1",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
         "R",
         "sp"
       ],
-      "Hash": "49704afce6839b2ac1c82c098feb7cc7"
+      "Hash": "af4612131699a5b8a0fe36a9ebbcc13b"
     },
     "spatialreg": {
       "Package": "spatialreg",
-      "Version": "1.3-1",
+      "Version": "1.3-4",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -2321,11 +2475,11 @@
         "spdep",
         "splines"
       ],
-      "Hash": "08348115a77f71360ffb78d975e4b30a"
+      "Hash": "ae8b944d3947f9a21f3353fcee6881a5"
     },
     "spdep": {
       "Package": "spdep",
-      "Version": "1.3-1",
+      "Version": "1.3-5",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -2344,7 +2498,7 @@
         "units",
         "utils"
       ],
-      "Hash": "5b1d5b2dc0ad9de72fe994dbe205cfb6"
+      "Hash": "20433c4ddbf9c509264166d325326703"
     },
     "stringfish": {
       "Package": "stringfish",
@@ -2451,7 +2605,7 @@
     },
     "terra": {
       "Package": "terra",
-      "Version": "1.7-55",
+      "Version": "1.7-78",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -2459,7 +2613,7 @@
         "Rcpp",
         "methods"
       ],
-      "Hash": "c011cc748506148c793428eb8ec101f9"
+      "Hash": "8f020def0792119cb98bd8f696dab22d"
     },
     "testthat": {
       "Package": "testthat",
@@ -2563,7 +2717,7 @@
     },
     "tidyterra": {
       "Package": "tidyterra",
-      "Version": "0.5.0",
+      "Version": "0.6.1",
       "Source": "Repository",
       "Repository": "CRAN",
       "Requirements": [
@@ -2580,7 +2734,7 @@
         "tibble",
         "tidyr"
       ],
-      "Hash": "11ecee46012db7475c840b498a07e8be"
+      "Hash": "5d9672bc78297d33c4ad8b51a8aaa48f"
     },
     "timechange": {
       "Package": "timechange",
