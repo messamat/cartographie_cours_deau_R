@@ -49,7 +49,7 @@ list(
   
   tar_target(bdtopo_strahler_path, file.path(resdir, "bdtopo_noartif_strahler_fr.csv"), format = 'file'),
   tar_target(ddtnets_strahler_path, file.path(resdir, "carto_loi_eau_noartif_strahler_fr.csv"), format = 'file'),
-
+  
   tar_target(amber_bvinters_path, file.path(resdir, "barriers_amber_bvinters.csv"),format = 'file'), #barriers
   tar_target(bdforet_bvinters_path, file.path(resdir, "bdforet_fr_bvinters.csv"),format = 'file'), #forest type
   tar_target(bdhaies_bvinters_path, file.path(resdir, "bdhaies_bvinters.csv"),format = 'file'), #hedges
@@ -382,32 +382,32 @@ list(
     format='file'
   ),
   
-  tar_target(
-    mods_envdd_intradep,
-    build_mods_envdd_intradep(in_envdd_multivar_analysis = envdd_multivar_analysis,
-                              in_drainage_density_summary = drainage_density_summary,
-                              in_bvdep_inters_gdb_path = bvdep_inters_gdb_path)
-  )
-  ,
+  # tar_target(
+  #   mods_envdd_intradep,
+  #   build_mods_envdd_intradep(in_envdd_multivar_analysis = envdd_multivar_analysis,
+  #                             in_drainage_density_summary = drainage_density_summary,
+  #                             in_bvdep_inters_gdb_path = bvdep_inters_gdb_path)
+  # )
+  # ,
   
-  tar_target(
-    selected_envdd_coefs,
-    export_envdd_coefs(in_mods_envdd_intradep = mods_envdd_intradep,
-                       in_envdd_multivar_analysis = envdd_multivar_analysis
-    )
-  ),
-  
-  #Write model coefs CSV. May need to write in schema.ini file for correct import to ArcGIS PRo
-  tar_target(
-    envdd_coefs_tab,
-    lapply(selected_envdd_coefs, function(tab) {
-      fwrite(tab, 
-             file.path(resdir, 
-                       paste0('envdd_intradep_coef_', tab$variable[[1]],".csv"))
-      )
-    })
-  ),
-  
+  # tar_target(
+  #   selected_envdd_coefs,
+  #   export_envdd_coefs(in_mods_envdd_intradep = mods_envdd_intradep,
+  #                      in_envdd_multivar_analysis = envdd_multivar_analysis
+  #   )
+  # ),
+  # 
+  # #Write model coefs CSV. May need to write in schema.ini file for correct import to ArcGIS PRo
+  # tar_target(
+  #   envdd_coefs_tab,
+  #   lapply(selected_envdd_coefs, function(tab) {
+  #     fwrite(tab, 
+  #            file.path(resdir, 
+  #                      paste0('envdd_intradep_coef_', tab$variable[[1]],".csv"))
+  #     )
+  #   })
+  # ),
+  # 
   tar_target(
     mods_envdd_interdep,
     build_mods_envdd_interdep(in_env_dd_merged_dep=env_dd_merged_dep,
@@ -415,15 +415,15 @@ list(
                               in_deps_shp_path=deps_shp_path)
   )
   ,
-  
-  tar_target(
-    output_plots5,
-    ggsave(paste0("env_ddratio_corheatmap_avg.png"),
-           envdd_multivar_analysis$env_ddratio_corheatmap_avg_morecl,
-           width = 250, height=300, units='mm', dpi=600
-    )
-  )
-  ,
+  # 
+  # tar_target(
+  #   output_plots5,
+  #   ggsave(paste0("env_ddratio_corheatmap_avg.png"),
+  #          envdd_multivar_analysis$env_ddratio_corheatmap_avg_morecl,
+  #          width = 250, height=300, units='mm', dpi=600
+  #   )
+  # )
+  # ,
   
   tar_target(
     vulnerable_waters_analysis,
@@ -449,7 +449,31 @@ list(
         fwrite(file.path(resdir, 'vulnerable_waters_analysis_ires.csv'))
     }
   )
-  #,
+  ,
+  tar_target(
+    summary_table_preformatted,
+    preformat_summary_table(metadata_nets_formatted,
+                            vulnerable_waters_analysis,
+                            missing_ddtdata_bvs,
+                            drainage_density_summary,
+                            envdd_multivar_analysis)
+  ),
+  
+  tar_target(
+    drainage_histograms,
+    plot_drainage_histograms(summary_table_preformatted)
+  ),
+  
+  tar_target(
+    output_histoplots,
+      lapply(list('ce', 'ind', 'nce', 'ddr'), function(plot_n) {
+        ggsave(file.path(resdir,
+                         paste0("drainage_summary_histogram", plot_n, ".pdf")),
+               drainage_histograms[[plot_n]],
+               width = 60, height= 60, units='mm'
+        )
+      })
+  )
   #
   # tar_target(
   #   envdd_plot_correlations,

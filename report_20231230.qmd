@@ -33,6 +33,7 @@ tar_load(mods_envdd_intradep)
 tar_load(onde_coverage)
 tar_load(fish_coverage)
 tar_load(hydrobio_coverage)
+summary_table_raw <- tar_read(summary_table_preformatted)
 
 excluded_deps = c(75, 92, 93, 94)
 
@@ -87,72 +88,7 @@ summary_table_raw
 #| label: tbl-summary-dep 
 #| tbl-cap: "" 
 
-#Number of lines, whether NCEs are included and origin of data
-meta_summary <- metadata_nets_formatted[, list(
-  nlines_reported = sum(nlines_reported),
-  nce_included = any(nce_included %in% 
-                       c("O", "O (non-explicite)","O (dans autre couche)")),
-  nce_included_cat = !("Pas de catégorie correspondante" %in% nce_recat),
-  data_orig = data_orig), by=c('dep_code', 'dep_name')] %>%
-  setnames('dep_code', 'INSEE_DEP')
-
-#Mapped percentage with flow permanence status
-#per_determined_raw <- ddtnets_bvinters_stats$per_raw_determined_dep
-
-#Get departments that fully included departments
-deps_wnce_summary <- vulnerable_waters_analysis$deps_wnce
-
-#% of area covered by cartography
-per_missing_area_bydep <- missing_ddtdata_bvs$nodata_per_area_bydep %>%
-  setDT %>%
-  setnames('INSEE_DEP.x', 'INSEE_DEP')
-
-#Vulnerable water statistics
-vulnwat_summary <- vulnerable_waters_analysis$dep_analysis %>%
-  .[, per_hdw := .SD[strahler=='1', per_length_order], by=INSEE_DEP] %>% 
-  .[, per_determined := length_determined/length_order] %>%
-  rbind(vulnerable_waters_analysis$dep_analysis_nonce, fill=T) %>%
-  .[strahler=='total', -c('strahler'), with=F] %>%
-  setnames(c('per_nce'), c('per_nce_interp'))
-
-#Do not compute for those without NCE data because a lot of first order streams may no be included (so assigning 1st order to 2nd or 3rd order streams)
-
-#drainage density ratio
-ddr_summary <- drainage_density_summary$nets_stats_melt_dep[
-  variable=='bdtopo', 
-  .(INSEE_DEP,  length_ddtnets_total, per_ce, per_ind, per_nce,
-    lengthratio_ddt_ceind_to_other)]
-
-#cluster group
-gclass_summary <- envdd_multivar_analysis$env_dd_dep_cor_avg_morecl[
-  !duplicated(INSEE_DEP),
-  .(n_bvs, gclass), by=INSEE_DEP]
-
-
-summary_table_raw <- Reduce(
-  function(x, y) merge(x, y, by='INSEE_DEP', all.x=T, all.y=T),
-  list(meta_summary,per_missing_area_bydep, vulnwat_summary,
-       ddr_summary, gclass_summary)
-) %>%
-  .[, nce_mostincluded := (INSEE_DEP %in% deps_wnce_summary)] %>%
-  .[, c(
-    "INSEE_DEP","dep_name", 'gclass', 'data_orig', 'n_bvs',"nlines_reported", "length_ddtnets_total",'nce_included', 'nce_included_cat', 'nce_mostincluded', 'per_missing_area', 'per_bdtopoID', "lengthratio_ddt_ceind_to_other", 'per_ce', 'per_ind', 'per_nce','stats_source', 'length_order','per_determined', 'per_nce_interp', 'per_ires', "per_hdw", "per_hdworires", "ires_nce_representativeness", "per_nce_hdworires","representativeness_hdworires_in_nce"
-  ),
-  with=F] 
-
-#format mode of access
-summary_table_raw[,
-                  data_orig := fcase(
-                    data_orig %in% c('GEOIDE', 'Autre site'), 'Online',
-                    data_orig %in% c("Données procurées à Hervé Pella par DDT",
-                                     "DDT"), 'Request',
-                    data_orig == 'Autre site;DDT', 'Online & request'
-                  )]
-unique(summary_table_raw$data_orig)
-
-#format reference of analysis
-
-#------------------ Format table -----------------------------
+#------------------ Format summary table -----------------------------
 new_cols_sel <- c(
   'Name',
   'Number',
@@ -216,84 +152,6 @@ summary_table_raw[!(Name %in% c(75, 92, 93, 94)),] %>%
 
 
 
-```
-
-### Histograms to accompany national maps of drainage density
-
-```{r department_summary_histogram}
-#| label: tbl-summary-dep 
-#| tbl-cap: "" 
-
-# setnames(summary_table_raw,
-#          c('% watercourses (mapped)', '% uncategorized (mapped)',
-#            '% n-w (mapped)', 'Drainage density ratio (mapped)'),
-#          c('ce', 'ind', 'nce', 'ddratio'))
-
-#Watercourses ----------------------------------------------------
-summary_table_raw$ce_interval <- cut(
-  summary_table_raw$ce,
-  breaks = c(0, 0.2, 0.4, 0.6, 0.8, 0.95, 1),
-  include.lowest = FALSE,
-  labels = c("0-0.20", "0.20-0.40", "0.40-0.60", 
-             "0.60-0.80", "0.80-0.95", "0.95-1.00"))
-
-ggplot(summary_table_raw[!(Name %in% c(75, 92, 93, 94)),], 
-       aes(x=ce, fill=ce_interval)) +
-geom_histogram(binwidth = 0.05, boundary = 0) +
-  scale_x_continuous(labels = scales::percent,
-                     breaks=c(0, 0.2, 0.4, 0.6, 0.8, 0.95, 1),
-                     expand=c(0,0)) +
-  scale_fill_manual(values = c("0-0.20" = '#ffffccff',
-                               "0.20-0.40" = '#c7e9b4ff',
-                               "0.40-0.60" = '#7fcdbbff',
-                               "0.60-0.80" = '#41b6c4ff',
-                               "0.80-0.95" = '#2c7fb8ff',
-                               "0.95-1.00" = '#253494ff'
-                               )) +
-  scale_y_continuous(name='# of departments',
-                     expand=c(0,0)) +
-  theme_classic() +
-  theme(axis.title.x = element_blank(),
-        legend.position = 'none',
-        text = element_text(size=12),
-        plot.margin = margin(0, 0.5, 0, 0, "cm"))
-
-#Unclassified ------------------------------------------------
-summary_table_raw$ind_interval <- cut(
-  summary_table_raw$ind,
-  breaks = c(0, 0.001, seq(0.05,1,0.05)),
-  include.lowest = T
-)
-
-colscale_unclassified <- c('#fff7f3ff', rep('#fcd0ccff', 4), rep('#f994b1ff', 4),
-  rep('#e23e99ff', 4),rep('#99007bff', 4),rep('#49006aff', 4))
-names(colscale_unclassified) <- levels(summary_table_raw$ind_interval)
-
-colscale_unclassified_dt <- as.data.table(colscale_unclassified, 
-                                          keep.rownames = T) %>%
-  .[, order:= .I]
-
-summary_table_raw_indcount <- summary_table_raw[, .N, by=ind_interval] %>% 
-  merge(colscale_unclassified_dt, ., by.x='rn', by.y='ind_interval', all.x=T) %>%
-  .[is.na(N), N := 0] %>%
-  .[, ind_interval := factor(rn, levels=colscale_unclassified_dt$rn)]
-  
-ggplot(summary_table_raw_indcount, 
-       aes(x=ind_interval, y=N, fill=ind_interval)) +
-  geom_bar(stat='identity', witdh=1) +
-  scale_x_discrete(labels=c('0', rep('', 3), '0.20', rep('', 3), '0.40',
-                            rep('', 3), '0.60', rep('', 3), 0.80, rep('', 3), 1.00)) +
-  scale_fill_manual(values = colscale_unclassified) +
-  scale_y_continuous(name='# of departments',
-                     expand=c(0,0)) +
-  theme_classic() +
-  theme(axis.title.x = element_blank(),
-        legend.position = 'none',
-        text = element_text(size=12),
-        plot.margin = margin(0, 0.5, 0, 0, "cm"),
-        axis.text.x = element_text(hjust=1))
-
-#Non-water courses
 ```
 
 ## General stats
